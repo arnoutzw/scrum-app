@@ -11,6 +11,8 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
 <script>
 tailwind.config = {
   theme: {
@@ -58,6 +60,28 @@ tailwind.config = {
 <script>
 // ─── Data Layer ────────────────────────────────────────────────────────────────
 const DB_KEY = 'diy-kanban-data';
+
+// ─── Firebase ─────────────────────────────────────────────────────────────────
+firebase.initializeApp({
+  apiKey: "AIzaSyAqRWVgti-CuXzr5AkhDKmPlu7iA2MQpUg",
+  authDomain: "arnout-s-homelab.firebaseapp.com",
+  projectId: "arnout-s-homelab",
+  storageBucket: "arnout-s-homelab.firebasestorage.app",
+  messagingSenderId: "258011834485",
+  appId: "1:258011834485:web:5afb1efaa303b4dd93f03c",
+  measurementId: "G-VXDKDLXP7L"
+});
+const db = firebase.firestore();
+const FIRESTORE_DOC = db.collection('kanban-boards').doc('shared');
+
+let _fsWriteTimer = null;
+function saveToFirestore(data) {
+  clearTimeout(_fsWriteTimer);
+  _fsWriteTimer = setTimeout(() => {
+    FIRESTORE_DOC.set(JSON.parse(JSON.stringify(data)))
+      .catch(err => console.warn('Firestore write failed:', err));
+  }, 500);
+}
 
 const DEFAULT_COLUMNS = [
   { id: uid(), name: 'To Do', wipLimit: 0 },
@@ -129,6 +153,7 @@ function load() {
 
 function save(data) {
   localStorage.setItem(DB_KEY, JSON.stringify(data));
+  saveToFirestore(data);
 }
 
 function createProject(name) {
@@ -1780,6 +1805,34 @@ document.addEventListener('keydown', (e) => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+
+// ─── Firestore Real-time Sync ─────────────────────────────────────────────────
+function migrateData(data) {
+  (data.projects || []).forEach(p => {
+    if (!p.members) p.members = [];
+    (p.cards || []).forEach(c => {
+      if (!c.dependencies) c.dependencies = [];
+      if (!c.assignee) c.assignee = '';
+    });
+  });
+  return data;
+}
+
+FIRESTORE_DOC.onSnapshot(doc => {
+  if (doc.exists && !doc.metadata.hasPendingWrites) {
+    const data = migrateData(doc.data());
+    state = data;
+    localStorage.setItem(DB_KEY, JSON.stringify(data));
+    render();
+  }
+}, err => console.warn('Firestore listener error:', err));
+
+// Push initial state to Firestore if no remote data exists yet
+FIRESTORE_DOC.get().then(doc => {
+  if (!doc.exists) {
+    saveToFirestore(state);
+  }
+}).catch(() => {});
 
 // ─── Init ──────────────────────────────────────────────────────────────────────
 render();
