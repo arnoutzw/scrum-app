@@ -67,6 +67,26 @@ tailwind.config = {
   .retro-grid { background-image: radial-gradient(circle, #27272a 1px, transparent 1px); background-size: 40px 40px; }
 
   /* WordArt styles — classic '90s Office vibes */
+  .emoji-note { position: absolute; cursor: default; user-select: none; display: flex; flex-direction: column; align-items: center; }
+  .emoji-note .emoji-display { line-height: 1; cursor: default; }
+  .image-note { position: absolute; cursor: default; user-select: none; border-radius: 6px; overflow: hidden; box-shadow: 2px 4px 12px rgba(0,0,0,0.4); }
+  .image-note:hover { box-shadow: 2px 6px 20px rgba(0,0,0,0.5); }
+  .resize-handle { position: absolute; bottom: 0; right: 0; width: 18px; height: 18px; cursor: nwse-resize; opacity: 0; transition: opacity 0.15s; }
+  .retro-note:hover .resize-handle, .emoji-note:hover .resize-handle, .image-note:hover .resize-handle, .shape-note:hover .resize-handle { opacity: 0.6; }
+  .resize-handle:hover { opacity: 1 !important; }
+  /* Shapes */
+  .shape-note { position: absolute; cursor: default; user-select: none; }
+  .shape-note.dragging-note { opacity: 0.7; z-index: 100 !important; }
+  /* Connection anchors */
+  .conn-anchor { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #1e3a5f; cursor: crosshair; opacity: 0; transition: opacity 0.15s; z-index: 200; transform: translate(-50%, -50%); }
+  .retro-note:hover .conn-anchor, .shape-note:hover .conn-anchor, .wordart-item:hover .conn-anchor, .image-note:hover .conn-anchor, .emoji-note:hover .conn-anchor { opacity: 0.8; }
+  .conn-anchor:hover { opacity: 1 !important; transform: translate(-50%, -50%) scale(1.3); }
+  .conn-anchor.anchor-top { top: 0; left: 50%; }
+  .conn-anchor.anchor-right { top: 50%; right: 0; transform: translate(50%, -50%); }
+  .conn-anchor.anchor-right:hover { transform: translate(50%, -50%) scale(1.3); }
+  .conn-anchor.anchor-bottom { bottom: 0; left: 50%; transform: translate(-50%, 50%); }
+  .conn-anchor.anchor-bottom:hover { transform: translate(-50%, 50%) scale(1.3); }
+  .conn-anchor.anchor-left { top: 50%; left: 0; }
   .wordart-item { position: absolute; cursor: default; user-select: none; }
   .wordart-text { font-family: 'Times New Roman', 'Georgia', serif; white-space: nowrap; line-height: 1; }
   .wa-rainbow { background: linear-gradient(90deg, #ff0000, #ff8800, #ffff00, #00cc00, #0066ff, #8800ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; font-style: italic; }
@@ -2123,6 +2143,10 @@ function deleteRetroNote(noteId) {
   const board = getActiveRetroBoard();
   if (!board) return;
   board.notes = board.notes.filter(n => n.id !== noteId);
+  // Clean up any connections referencing this note
+  if (board.connections) {
+    board.connections = board.connections.filter(c => c.fromId !== noteId && c.toId !== noteId);
+  }
   persist();
 }
 
@@ -2169,6 +2193,293 @@ function hasDownvoted(note) {
 function changeNoteColor(noteId, colorIdx) {
   const c = NOTE_COLORS[colorIdx];
   if (c) updateRetroNote(noteId, { color: c.bg, textColor: c.text });
+}
+
+// ─── Shapes ───────────────────────────────────────────────────────────────────
+const SHAPE_TYPES = [
+  { id: 'rect', name: 'Rectangle', icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>` },
+  { id: 'circle', name: 'Circle', icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>` },
+  { id: 'triangle', name: 'Triangle', icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L22 21H2Z"/></svg>` },
+  { id: 'diamond', name: 'Diamond', icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L22 12L12 22L2 12Z"/></svg>` },
+  { id: 'star', name: 'Star', icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14l-5-4.87 6.91-1.01z"/></svg>` },
+  { id: 'hexagon', name: 'Hexagon', icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/></svg>` },
+];
+
+const SHAPE_COLORS = [
+  { bg: '#3b82f6', border: '#2563eb', text: '#ffffff', name: 'Blue' },
+  { bg: '#ef4444', border: '#dc2626', text: '#ffffff', name: 'Red' },
+  { bg: '#22c55e', border: '#16a34a', text: '#ffffff', name: 'Green' },
+  { bg: '#f59e0b', border: '#d97706', text: '#1c1917', name: 'Amber' },
+  { bg: '#8b5cf6', border: '#7c3aed', text: '#ffffff', name: 'Purple' },
+  { bg: '#ec4899', border: '#db2777', text: '#ffffff', name: 'Pink' },
+  { bg: '#06b6d4', border: '#0891b2', text: '#ffffff', name: 'Cyan' },
+  { bg: '#ffffff', border: '#d4d4d8', text: '#18181b', name: 'White' },
+  { bg: '#27272a', border: '#3f3f46', text: '#e4e4e7', name: 'Dark' },
+];
+
+let shapeDialogOpen = false;
+
+function openShapeDialog() {
+  shapeDialogOpen = true;
+  let el = document.getElementById('shape-modal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'shape-modal';
+    document.body.appendChild(el);
+  }
+  renderShapeDialog();
+}
+
+function closeShapeDialog() {
+  shapeDialogOpen = false;
+  const el = document.getElementById('shape-modal');
+  if (el) el.innerHTML = '';
+}
+
+function renderShapeDialog() {
+  const el = document.getElementById('shape-modal');
+  if (!el || !shapeDialogOpen) return;
+  el.innerHTML = `
+    <div class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);"
+      onclick="if(event.target===this) closeShapeDialog();">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-mono font-bold text-zinc-100">Add Shape</h3>
+          <button onclick="closeShapeDialog()" class="text-zinc-500 hover:text-zinc-300 transition-colors"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M5 5L13 13M13 5L5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
+        <input type="text" id="shape-label-input" placeholder="Label (optional)" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none mb-3">
+        <label class="text-xs text-zinc-500 font-mono block mb-2">Shape</label>
+        <div class="grid grid-cols-6 gap-2 mb-4">
+          ${SHAPE_TYPES.map(s => `<button onclick="document.querySelectorAll('.shape-type-btn').forEach(b=>b.classList.remove('border-amber-500','text-amber-400')); this.classList.add('border-amber-500','text-amber-400'); document.getElementById('shape-modal').dataset.shapeType='${s.id}';"
+            class="shape-type-btn flex flex-col items-center gap-1 p-2 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors" title="${s.name}">
+            ${s.icon}
+            <span class="text-[10px] font-mono">${s.name}</span>
+          </button>`).join('')}
+        </div>
+        <label class="text-xs text-zinc-500 font-mono block mb-2">Color</label>
+        <div class="flex flex-wrap gap-2 mb-4" id="shape-color-picker">
+          ${SHAPE_COLORS.map((c, i) => `<button onclick="document.querySelectorAll('.shape-color-btn').forEach(b=>b.classList.remove('ring-2','ring-amber-400')); this.classList.add('ring-2','ring-amber-400'); document.getElementById('shape-modal').dataset.colorIdx='${i}';"
+            class="shape-color-btn w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${i === 0 ? 'ring-2 ring-amber-400' : ''}"
+            style="background:${c.bg}; border-color:${c.border};" title="${c.name}"></button>`).join('')}
+        </div>
+        <button onclick="insertShape()" class="w-full bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm">Add to Board</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('shape-modal').dataset.shapeType = '';
+  document.getElementById('shape-modal').dataset.colorIdx = '0';
+  requestAnimationFrame(() => {
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    document.getElementById('shape-label-input')?.focus();
+  });
+}
+
+function insertShape() {
+  const board = getActiveRetroBoard();
+  if (!board) return;
+  const modal = document.getElementById('shape-modal');
+  const shapeType = modal?.dataset.shapeType || 'rect';
+  const colorIdx = parseInt(modal?.dataset.colorIdx || '0');
+  const label = (document.getElementById('shape-label-input')?.value || '').trim();
+  const color = SHAPE_COLORS[colorIdx] || SHAPE_COLORS[0];
+
+  board.notes.push({
+    id: uid(),
+    type: 'shape',
+    shapeType,
+    columnId: null,
+    text: label,
+    color: color.bg,
+    borderColor: color.border,
+    textColor: color.text,
+    width: shapeType === 'circle' ? 120 : 160,
+    height: shapeType === 'circle' ? 120 : 100,
+    x: -retroState.canvas.panX / retroState.canvas.zoom + 120 + Math.random() * 60,
+    y: -retroState.canvas.panY / retroState.canvas.zoom + 120 + Math.random() * 60,
+    votes: 0,
+    voters: [],
+    author: retroState.nickname || '',
+    createdAt: Date.now()
+  });
+  closeShapeDialog();
+  persist();
+}
+
+function renderRetroShape(note) {
+  const w = note.width || 160;
+  const h = note.height || 100;
+  let shapeSvg = '';
+  const fill = note.color || '#3b82f6';
+  const stroke = note.borderColor || '#2563eb';
+
+  switch (note.shapeType) {
+    case 'circle':
+      shapeSvg = `<ellipse cx="${w/2}" cy="${h/2}" rx="${w/2 - 2}" ry="${h/2 - 2}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+      break;
+    case 'triangle':
+      shapeSvg = `<polygon points="${w/2},2 ${w-2},${h-2} 2,${h-2}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+      break;
+    case 'diamond':
+      shapeSvg = `<polygon points="${w/2},2 ${w-2},${h/2} ${w/2},${h-2} 2,${h/2}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+      break;
+    case 'star': {
+      const cx = w/2, cy = h/2, ro = Math.min(w,h)/2 - 2, ri = ro * 0.4;
+      let pts = '';
+      for (let i = 0; i < 10; i++) {
+        const a = Math.PI / 2 * -1 + (Math.PI / 5) * i;
+        const r = i % 2 === 0 ? ro : ri;
+        pts += `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)} `;
+      }
+      shapeSvg = `<polygon points="${pts.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+      break;
+    }
+    case 'hexagon': {
+      const cx = w/2, cy = h/2, r = Math.min(w,h)/2 - 2;
+      let pts = '';
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6;
+        pts += `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)} `;
+      }
+      shapeSvg = `<polygon points="${pts.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+      break;
+    }
+    default: // rect
+      shapeSvg = `<rect x="2" y="2" width="${w-4}" height="${h-4}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+  }
+
+  return `
+    <div class="shape-note" id="retro-note-wrap-${note.id}"
+      style="left:${note.x}px; top:${note.y}px; width:${w}px; height:${h}px; z-index:${10 + (note.votes||0)};"
+      data-note-id="${note.id}">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="position:absolute;top:0;left:0;">
+        ${shapeSvg}
+      </svg>
+      ${note.text ? `<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+        <span class="font-mono font-bold text-xs text-center px-2" style="color:${note.textColor || '#fff'}; max-width:${w-16}px; word-break:break-word; pointer-events:auto; cursor:text;"
+          contenteditable="true" spellcheck="false"
+          onblur="updateRetroNote('${note.id}', {text: this.textContent})"
+          onclick="event.stopPropagation();">${escHtml(note.text)}</span>
+      </div>` : `<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+        <span class="font-mono text-xs text-center px-2" style="color:${note.textColor || '#fff'}; opacity:0.5; max-width:${w-16}px; pointer-events:auto; cursor:text;"
+          contenteditable="true" spellcheck="false"
+          onblur="updateRetroNote('${note.id}', {text: this.textContent})"
+          onclick="event.stopPropagation();">label</span>
+      </div>`}
+      <div class="flex items-center gap-1" style="position:absolute; top:-24px; left:50%; transform:translateX(-50%); white-space:nowrap;">
+        <div class="flex items-center gap-1 px-1 py-0.5 rounded bg-zinc-900/80" style="cursor:grab;" data-note-drag="${note.id}">
+          <svg width="10" height="10" viewBox="0 0 10 10" style="opacity:0.5;color:#a1a1aa"><circle cx="2" cy="2" r="1.2" fill="currentColor"/><circle cx="7" cy="2" r="1.2" fill="currentColor"/><circle cx="2" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/></svg>
+        </div>
+        <button onclick="event.stopPropagation(); deleteRetroNote('${note.id}')"
+          class="px-1 py-0.5 rounded bg-zinc-900/80 hover:opacity-80 transition-opacity" style="color:#a1a1aa; opacity:0.5;">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2L8 8M8 2L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      ${renderAnchors(note.id)}
+      <div class="resize-handle" data-resize="${note.id}">
+        <svg width="18" height="18" viewBox="0 0 18 18" style="color:#a1a1aa;"><path d="M14 4L4 14M14 8L8 14M14 12L12 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Connections / Arrows ─────────────────────────────────────────────────────
+let isDrawingArrow = false;
+let arrowFromId = null;
+let arrowFromAnchor = null;
+let arrowTempTarget = null;
+
+function getConnections(board) {
+  if (!board.connections) board.connections = [];
+  return board.connections;
+}
+
+function addConnection(fromId, fromAnchor, toId, toAnchor) {
+  const board = getActiveRetroBoard();
+  if (!board) return;
+  if (fromId === toId) return;
+  const conns = getConnections(board);
+  // avoid duplicate
+  const exists = conns.find(c => c.fromId === fromId && c.fromAnchor === fromAnchor && c.toId === toId && c.toAnchor === toAnchor);
+  if (exists) return;
+  conns.push({ id: uid(), fromId, fromAnchor, toId, toAnchor, color: '#3b82f6' });
+  persist();
+}
+
+function deleteConnection(connId) {
+  const board = getActiveRetroBoard();
+  if (!board) return;
+  board.connections = (board.connections || []).filter(c => c.id !== connId);
+  persist();
+}
+
+function getAnchorPoint(noteId, anchor) {
+  const el = document.getElementById('retro-note-wrap-' + noteId);
+  if (!el) return null;
+  const x = parseFloat(el.style.left) || 0;
+  const y = parseFloat(el.style.top) || 0;
+  const w = el.offsetWidth || 0;
+  const h = el.offsetHeight || 0;
+  switch (anchor) {
+    case 'top': return { x: x + w / 2, y: y };
+    case 'right': return { x: x + w, y: y + h / 2 };
+    case 'bottom': return { x: x + w / 2, y: y + h };
+    case 'left': return { x: x, y: y + h / 2 };
+    default: return { x: x + w / 2, y: y + h / 2 };
+  }
+}
+
+function renderAnchors(noteId) {
+  return `
+    <div class="conn-anchor anchor-top" data-conn-anchor="${noteId}" data-anchor-pos="top"></div>
+    <div class="conn-anchor anchor-right" data-conn-anchor="${noteId}" data-anchor-pos="right"></div>
+    <div class="conn-anchor anchor-bottom" data-conn-anchor="${noteId}" data-anchor-pos="bottom"></div>
+    <div class="conn-anchor anchor-left" data-conn-anchor="${noteId}" data-anchor-pos="left"></div>
+  `;
+}
+
+function renderConnections(board) {
+  const conns = board.connections || [];
+  if (conns.length === 0 && !isDrawingArrow) return '';
+  return `<svg id="retro-connections-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;">
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6"/>
+      </marker>
+      <marker id="arrowhead-temp" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f680"/>
+      </marker>
+    </defs>
+    ${conns.map(c => {
+      const from = getAnchorPoint(c.fromId, c.fromAnchor);
+      const to = getAnchorPoint(c.toId, c.toAnchor);
+      if (!from || !to) return '';
+      const color = c.color || '#3b82f6';
+      return `<g style="pointer-events:auto; cursor:pointer;" onclick="event.stopPropagation(); if(confirm('Delete this connection?')) deleteConnection('${c.id}')">
+        <line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="transparent" stroke-width="12"/>
+        <line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="${color}" stroke-width="2.5" marker-end="url(#arrowhead)" stroke-linecap="round"/>
+      </g>`;
+    }).join('')}
+  </svg>`;
+}
+
+let arrowModeActive = false;
+function toggleArrowMode() {
+  arrowModeActive = !arrowModeActive;
+  isDrawingArrow = false;
+  arrowFromId = null;
+  arrowFromAnchor = null;
+  const btn = document.getElementById('arrow-mode-btn');
+  if (btn) {
+    if (arrowModeActive) {
+      btn.classList.add('border-blue-500', 'text-blue-400', 'bg-blue-500/10');
+    } else {
+      btn.classList.remove('border-blue-500', 'text-blue-400', 'bg-blue-500/10');
+    }
+  }
+  // Show/hide anchors with more visibility in arrow mode
+  document.querySelectorAll('.conn-anchor').forEach(a => {
+    a.style.opacity = arrowModeActive ? '0.7' : '';
+  });
 }
 
 function addRetroColumn(board) {
@@ -2458,6 +2769,15 @@ function renderRetroCanvas(board) {
             style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: bold; letter-spacing: -0.5px;">
             <span style="background:linear-gradient(to right,#ff0,#f0f,#0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:13px;">W</span> WordArt
           </button>
+          <button onclick="openShapeDialog()"
+            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-sky-500 hover:text-sky-400 transition-colors">
+            <i data-lucide="shapes" class="w-3 h-3"></i> Shape
+          </button>
+          <button onclick="toggleArrowMode()"
+            id="arrow-mode-btn"
+            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-blue-500 hover:text-blue-400 transition-colors">
+            <i data-lucide="move-right" class="w-3 h-3"></i> Arrow
+          </button>
           <button onclick="addRetroColumn(getActiveRetroBoard())"
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
             <i data-lucide="columns-3" class="w-3 h-3"></i> Column
@@ -2468,6 +2788,7 @@ function renderRetroCanvas(board) {
       <!-- Canvas -->
       <div id="retro-canvas" class="retro-canvas flex-1 retro-grid bg-zinc-950" style="position:relative; overflow:hidden;">
         <div class="canvas-inner" style="transform: translate(${panX}px, ${panY}px) scale(${zoom});">
+          ${renderConnections(board)}
           ${board.columns.map(col => renderRetroColumn(col, board)).join('')}
           ${board.notes.map(note => renderRetroNote(note)).join('')}
         </div>
@@ -2510,6 +2831,7 @@ function renderRetroNote(note) {
   if (note.type === 'gif') return renderRetroGifNote(note);
   if (note.type === 'wordart') return renderRetroWordArt(note);
   if (note.type === 'meme') return renderRetroGifNote(note);
+  if (note.type === 'shape') return renderRetroShape(note);
   const votes = note.votes || 0;
   return `
     <div class="retro-note" id="retro-note-wrap-${note.id}"
@@ -2555,6 +2877,7 @@ function renderRetroNote(note) {
         </div>
         ${note.author ? `<span class="text-xs font-mono" style="opacity:0.5;">${escHtml(note.author)}</span>` : ''}
       </div>
+      ${renderAnchors(note.id)}
     </div>
   `;
 }
@@ -2593,6 +2916,7 @@ function renderRetroGifNote(note) {
         </div>
         ${note.author ? `<span class="text-xs font-mono" style="color:#71717a;">${escHtml(note.author)}</span>` : ''}
       </div>
+      ${renderAnchors(note.id)}
     </div>
   `;
 }
@@ -2756,6 +3080,7 @@ function renderRetroWordArt(note) {
         ${note.author ? `<span class="px-1 py-0.5 rounded bg-zinc-900/80 text-xs font-mono" style="color:#71717a;">${escHtml(note.author)}</span>` : ''}
       </div>
       <div class="wordart-text ${wa.css}" style="${wa.style}">${escHtml(note.text)}</div>
+      ${renderAnchors(note.id)}
     </div>
   `;
 }
@@ -3188,6 +3513,10 @@ function attachRetroListeners() {
   let dragNoteId = null;
   let dragStart = { x: 0, y: 0 };
   let dragNoteStart = { x: 0, y: 0 };
+  let isResizing = false;
+  let resizeNoteId = null;
+  let resizeStart = { x: 0, y: 0 };
+  let resizeNoteStartSize = { w: 0, h: 0 };
 
   // Restore timer display if running
   if (retroState.timer.running || (retroState.timer.seconds === 0 && !retroState.timer.running)) {
@@ -3199,8 +3528,76 @@ function attachRetroListeners() {
     return { x: touch.clientX, y: touch.clientY };
   }
 
+  function refreshConnectionsSvg() {
+    const board = getActiveRetroBoard();
+    if (!board) return;
+    const svg = document.getElementById('retro-connections-svg');
+    if (svg) {
+      const parent = svg.parentNode;
+      const temp = document.createElement('div');
+      temp.innerHTML = renderConnections(board);
+      const newSvg = temp.querySelector('svg');
+      if (newSvg) svg.replaceWith(newSvg);
+      else if (svg) svg.innerHTML = '';
+    }
+  }
+
   // Note dragging
   canvas.addEventListener('mousedown', (e) => {
+    // Connection anchor click
+    const anchor = e.target.closest('[data-conn-anchor]');
+    if (anchor && arrowModeActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      const noteId = anchor.dataset.connAnchor;
+      const anchorPos = anchor.dataset.anchorPos;
+      if (!isDrawingArrow) {
+        isDrawingArrow = true;
+        arrowFromId = noteId;
+        arrowFromAnchor = anchorPos;
+        anchor.style.background = '#22c55e';
+        anchor.style.opacity = '1';
+      } else {
+        // Complete the arrow
+        addConnection(arrowFromId, arrowFromAnchor, noteId, anchorPos);
+        isDrawingArrow = false;
+        arrowFromId = null;
+        arrowFromAnchor = null;
+        document.querySelectorAll('.conn-anchor').forEach(a => {
+          a.style.background = '';
+          a.style.opacity = arrowModeActive ? '0.7' : '';
+        });
+      }
+      return;
+    }
+
+    // Cancel arrow drawing on background click
+    if (isDrawingArrow && (e.target === canvas || e.target.classList.contains('canvas-inner') || e.target.classList.contains('retro-grid'))) {
+      isDrawingArrow = false;
+      arrowFromId = null;
+      arrowFromAnchor = null;
+      document.querySelectorAll('.conn-anchor').forEach(a => {
+        a.style.background = '';
+        a.style.opacity = arrowModeActive ? '0.7' : '';
+      });
+    }
+
+    // Resize handle
+    const resizeHandle = e.target.closest('[data-resize]');
+    if (resizeHandle) {
+      e.preventDefault();
+      e.stopPropagation();
+      isResizing = true;
+      resizeNoteId = resizeHandle.dataset.resize;
+      const pos = getCanvasPos(e);
+      resizeStart = { x: pos.x, y: pos.y };
+      const noteEl = document.getElementById('retro-note-wrap-' + resizeNoteId);
+      if (noteEl) {
+        resizeNoteStartSize = { w: noteEl.offsetWidth, h: noteEl.offsetHeight };
+      }
+      return;
+    }
+
     const dragHandle = e.target.closest('[data-note-drag]');
     if (dragHandle) {
       e.preventDefault();
@@ -3227,6 +3624,27 @@ function attachRetroListeners() {
   });
 
   canvas.addEventListener('mousemove', (e) => {
+    if (isResizing && resizeNoteId) {
+      const pos = getCanvasPos(e);
+      const dx = (pos.x - resizeStart.x) / retroState.canvas.zoom;
+      const dy = (pos.y - resizeStart.y) / retroState.canvas.zoom;
+      const newW = Math.max(40, resizeNoteStartSize.w + dx);
+      const newH = Math.max(40, resizeNoteStartSize.h + dy);
+      const noteEl = document.getElementById('retro-note-wrap-' + resizeNoteId);
+      if (noteEl) {
+        noteEl.style.width = newW + 'px';
+        noteEl.style.height = newH + 'px';
+        // Update internal SVG for shapes
+        const svg = noteEl.querySelector(':scope > svg');
+        if (svg) {
+          svg.setAttribute('width', newW);
+          svg.setAttribute('height', newH);
+          svg.setAttribute('viewBox', `0 0 ${newW} ${newH}`);
+        }
+      }
+      refreshConnectionsSvg();
+      return;
+    }
     if (isDraggingNote && dragNoteId) {
       const pos = getCanvasPos(e);
       const dx = (pos.x - dragStart.x) / retroState.canvas.zoom;
@@ -3236,6 +3654,7 @@ function attachRetroListeners() {
         noteEl.style.left = (dragNoteStart.x + dx) + 'px';
         noteEl.style.top = (dragNoteStart.y + dy) + 'px';
       }
+      refreshConnectionsSvg();
       return;
     }
     if (isPanning) {
@@ -3250,6 +3669,18 @@ function attachRetroListeners() {
   });
 
   canvas.addEventListener('mouseup', (e) => {
+    if (isResizing && resizeNoteId) {
+      const noteEl = document.getElementById('retro-note-wrap-' + resizeNoteId);
+      if (noteEl) {
+        updateRetroNote(resizeNoteId, {
+          width: noteEl.offsetWidth,
+          height: noteEl.offsetHeight
+        });
+      }
+      isResizing = false;
+      resizeNoteId = null;
+      return;
+    }
     if (isDraggingNote && dragNoteId) {
       const pos = getCanvasPos(e);
       const dx = (pos.x - dragStart.x) / retroState.canvas.zoom;
@@ -3269,6 +3700,7 @@ function attachRetroListeners() {
   });
 
   canvas.addEventListener('mouseleave', () => {
+    if (isResizing) { isResizing = false; resizeNoteId = null; }
     if (isDraggingNote && dragNoteId) {
       const noteEl = document.getElementById('retro-note-wrap-' + dragNoteId);
       if (noteEl) noteEl.classList.remove('dragging-note');
@@ -3311,6 +3743,7 @@ function attachRetroListeners() {
         noteEl.style.left = (dragNoteStart.x + dx) + 'px';
         noteEl.style.top = (dragNoteStart.y + dy) + 'px';
       }
+      refreshConnectionsSvg();
       return;
     }
     if (isPanning && e.touches.length === 1) {
