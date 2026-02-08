@@ -1392,6 +1392,23 @@ function renderSettings(proj) {
         </button>
       </div>
 
+      <!-- Integrations -->
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-zinc-100 mb-4 flex items-center gap-2">
+          <i data-lucide="puzzle" class="w-5 h-5 text-amber-500"></i> Integrations
+        </h3>
+        <div>
+          <label class="text-xs text-zinc-500 font-mono block mb-1">GIPHY API Key</label>
+          <p class="text-xs text-zinc-600 mb-2">Get a free key at <a href="https://developers.giphy.com" target="_blank" class="text-purple-400 hover:text-purple-300 underline">developers.giphy.com</a></p>
+          <div class="flex gap-2">
+            <input type="text" value="${escHtml(state.giphyApiKey || '')}" placeholder="Paste API key…"
+              onchange="setGiphyApiKey(this.value)"
+              class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            ${state.giphyApiKey ? `<button onclick="setGiphyApiKey('')" class="text-zinc-500 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-xs font-mono">Clear</button>` : ''}
+          </div>
+        </div>
+      </div>
+
       <!-- Danger Zone -->
       <div class="bg-zinc-900 border border-red-500/30 rounded-lg p-5">
         <h3 class="font-mono font-bold text-red-400 mb-3 flex items-center gap-2">
@@ -2404,7 +2421,8 @@ function renderRetroGifNote(note) {
 
 // ─── Giphy Integration ────────────────────────────────────────────────────────
 
-const GIPHY_API_KEY = 'dc6zaTOxFJmzC'; // Public beta key — replace with your own from developers.giphy.com
+function getGiphyApiKey() { return state.giphyApiKey || ''; }
+function setGiphyApiKey(key) { state.giphyApiKey = key.trim(); persist(); }
 let giphySearchTimer = null;
 let giphyResults = [];
 let giphyQuery = '';
@@ -2435,7 +2453,7 @@ function searchGiphy(query) {
   giphyLoading = true;
   renderGiphyResults();
   giphySearchTimer = setTimeout(() => {
-    const url = `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(query)}&limit=20&rating=pg`;
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${getGiphyApiKey()}&q=${encodeURIComponent(query)}&limit=20&rating=pg`;
     fetch(url)
       .then(r => r.json())
       .then(data => {
@@ -2457,7 +2475,7 @@ function searchGiphy(query) {
 function loadTrendingGiphy() {
   giphyLoading = true;
   renderGiphyResults();
-  const url = `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=20&rating=pg`;
+  const url = `https://api.giphy.com/v1/gifs/trending?api_key=${getGiphyApiKey()}&limit=20&rating=pg`;
   fetch(url)
     .then(r => r.json())
     .then(data => {
@@ -2520,17 +2538,31 @@ function renderGiphyModal() {
           </button>
         </div>
         <div class="p-4">
-          <div class="relative mb-3">
-            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"></i>
-            <input type="text" id="giphy-search-input" placeholder="Search GIFs..."
-              value="${escHtml(giphyQuery)}"
-              oninput="searchGiphy(this.value)"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-purple-500 focus:outline-none">
-          </div>
-          ${!giphyQuery ? `<button onclick="loadTrendingGiphy()" class="text-xs font-mono text-purple-400 hover:text-purple-300 mb-3 transition-colors">Show trending GIFs</button>` : ''}
-          <div id="giphy-results" class="max-h-80 overflow-y-auto">
-            ${renderGiphyResultsInner()}
-          </div>
+          ${!getGiphyApiKey() ? `
+            <div class="flex flex-col items-center py-4">
+              <i data-lucide="key" class="w-8 h-8 text-zinc-600 mb-3"></i>
+              <p class="text-sm text-zinc-300 font-mono mb-1">GIPHY API Key Required</p>
+              <p class="text-xs text-zinc-500 mb-4 text-center">Get a free key at <a href="https://developers.giphy.com" target="_blank" class="text-purple-400 hover:text-purple-300 underline">developers.giphy.com</a> — create an app and copy the API key.</p>
+              <div class="flex gap-2 w-full">
+                <input type="text" id="giphy-key-input" placeholder="Paste your GIPHY API key…"
+                  class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-purple-500 focus:outline-none">
+                <button onclick="const v=document.getElementById('giphy-key-input').value; if(v.trim()){setGiphyApiKey(v); renderGiphyModal();}"
+                  class="px-4 py-2 text-xs font-mono font-bold rounded-lg bg-purple-500 hover:bg-purple-400 text-white transition-colors">Save</button>
+              </div>
+            </div>
+          ` : `
+            <div class="relative mb-3">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"></i>
+              <input type="text" id="giphy-search-input" placeholder="Search GIFs..."
+                value="${escHtml(giphyQuery)}"
+                oninput="searchGiphy(this.value)"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-purple-500 focus:outline-none">
+            </div>
+            ${!giphyQuery ? `<button onclick="loadTrendingGiphy()" class="text-xs font-mono text-purple-400 hover:text-purple-300 mb-3 transition-colors">Show trending GIFs</button>` : ''}
+            <div id="giphy-results" class="max-h-80 overflow-y-auto">
+              ${renderGiphyResultsInner()}
+            </div>
+          `}
           <div class="mt-3 text-center">
             <span class="text-xs text-zinc-600 font-mono">Powered by GIPHY</span>
           </div>
