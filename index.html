@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f59e0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DIY Kanban — Project Planner</title>
+<link rel="manifest" href="./manifest.json">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace']
+      }
+    }
+  }
+}
+</script>
+<style>
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #18181b; }
+  ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+  * { box-sizing: border-box; }
+  .drag-over { border-color: #f59e0b !important; background: rgba(245,158,11,0.05) !important; }
+  .dragging { opacity: 0.5; transform: rotate(2deg); }
+  .card-enter { animation: cardEnter 0.25s ease-out; }
+  @keyframes cardEnter { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+  .slide-in { animation: slideIn 0.3s ease-out; }
+  @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  .fade-in { animation: fadeIn 0.2s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  [x-cloak] { display: none !important; }
+
+  /* Dependency graph styles */
+  .dep-graph-container { position: relative; }
+  .dep-node { cursor: pointer; user-select: none; }
+  .dep-node:hover .dep-node-border { stroke: #f59e0b; stroke-width: 2; }
+  .dep-edge { fill: none; stroke-width: 2; marker-end: url(#arrowhead); }
+  .dep-edge-blocked { stroke: #ef4444; opacity: 0.7; }
+  .dep-edge-ok { stroke: #22c55e; opacity: 0.6; }
+  .dep-edge-neutral { stroke: #71717a; opacity: 0.5; }
+  .blocked-pulse { animation: blockedPulse 2s ease-in-out infinite; }
+  @keyframes blockedPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+</style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans text-sm min-h-screen">
+
+<div id="app"></div>
+
+<script>
+// ─── Data Layer ────────────────────────────────────────────────────────────────
+const DB_KEY = 'diy-kanban-data';
+
+const DEFAULT_COLUMNS = [
+  { id: uid(), name: 'To Do', wipLimit: 0 },
+  { id: uid(), name: 'In Progress', wipLimit: 3 },
+  { id: uid(), name: 'Review', wipLimit: 2 },
+  { id: uid(), name: 'Done', wipLimit: 0 }
+];
+
+const DEFAULT_LABELS = [
+  { name: 'Woodworking', color: 'amber' },
+  { name: 'Electrical', color: 'blue' },
+  { name: 'Plumbing', color: 'cyan' },
+  { name: 'Painting', color: 'purple' },
+  { name: 'Metalwork', color: 'red' },
+  { name: 'Landscaping', color: 'green' },
+  { name: 'General', color: 'zinc' }
+];
+
+const PRIORITY_MAP = {
+  low: { label: 'Low', color: 'text-zinc-400', bg: 'bg-zinc-700', icon: 'chevron-down' },
+  medium: { label: 'Medium', color: 'text-amber-400', bg: 'bg-amber-500/20', icon: 'minus' },
+  high: { label: 'High', color: 'text-red-400', bg: 'bg-red-500/20', icon: 'chevron-up' },
+  critical: { label: 'Critical', color: 'text-red-500', bg: 'bg-red-500/30', icon: 'alert-triangle' }
+};
+
+const LABEL_COLORS = {
+  amber: { bg: 'bg-amber-500/20', text: 'text-amber-400', dot: 'bg-amber-500' },
+  blue: { bg: 'bg-blue-500/20', text: 'text-blue-400', dot: 'bg-blue-500' },
+  cyan: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', dot: 'bg-cyan-500' },
+  purple: { bg: 'bg-purple-500/20', text: 'text-purple-400', dot: 'bg-purple-500' },
+  red: { bg: 'bg-red-500/20', text: 'text-red-400', dot: 'bg-red-500' },
+  green: { bg: 'bg-green-500/20', text: 'text-green-400', dot: 'bg-green-500' },
+  zinc: { bg: 'bg-zinc-700', text: 'text-zinc-400', dot: 'bg-zinc-500' }
+};
+
+const AVATAR_COLORS = ['amber', 'blue', 'cyan', 'purple', 'red', 'green', 'pink', 'orange'];
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function getInitials(name) {
+  return name.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function getAvatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getAvatarClasses(name, size = 'sm') {
+  const color = getAvatarColor(name);
+  const colorMap = {
+    amber: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    cyan: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    purple: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    red: 'bg-red-500/20 text-red-400 border-red-500/30',
+    green: 'bg-green-500/20 text-green-400 border-green-500/30',
+    pink: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+    orange: 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+  };
+  const sizeMap = { xs: 'w-5 h-5 text-[8px]', sm: 'w-6 h-6 text-[9px]', md: 'w-8 h-8 text-xs' };
+  return `${colorMap[color] || colorMap.amber} ${sizeMap[size] || sizeMap.sm} rounded-full border flex items-center justify-center font-mono font-bold flex-shrink-0`;
+}
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(DB_KEY)) || null; } catch { return null; }
+}
+
+function save(data) {
+  localStorage.setItem(DB_KEY, JSON.stringify(data));
+}
+
+function createProject(name) {
+  return {
+    id: uid(),
+    name,
+    columns: JSON.parse(JSON.stringify(DEFAULT_COLUMNS)),
+    labels: JSON.parse(JSON.stringify(DEFAULT_LABELS)),
+    members: [],
+    cards: [],
+    createdAt: Date.now()
+  };
+}
+
+function initData() {
+  let data = load();
+  if (!data) {
+    const proj = createProject('My First DIY Project');
+    data = { projects: [proj], activeProjectId: proj.id, view: 'board' };
+    save(data);
+  }
+  // Migrate: ensure all cards have dependencies array and assignee
+  data.projects.forEach(p => {
+    if (!p.members) p.members = [];
+    (p.cards || []).forEach(c => {
+      if (!c.dependencies) c.dependencies = [];
+      if (!c.assignee) c.assignee = '';
+    });
+  });
+  return data;
+}
+
+// ─── State ─────────────────────────────────────────────────────────────────────
+let state = initData();
+let dragState = { cardId: null, sourceColId: null };
+let modal = null; // { type, data }
+let editingCard = null;
+let sidebarOpen = window.innerWidth >= 1024;
+let filterPriority = '';
+let filterLabel = '';
+let searchQuery = '';
+let boardSettingsOpen = false;
+let depHighlight = null; // cardId to highlight in deps view
+let filterAssignee = '';
+
+function getProject() {
+  return state.projects.find(p => p.id === state.activeProjectId);
+}
+
+function persist() {
+  save(state);
+  render();
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function formatDate(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function isOverdue(card) {
+  return card.dueDate && new Date(card.dueDate) < new Date() && card.columnId !== getDoneColumn()?.id;
+}
+
+function getDoneColumn() {
+  const proj = getProject();
+  return proj?.columns[proj.columns.length - 1];
+}
+
+function getColumnCards(colId) {
+  const proj = getProject();
+  return (proj?.cards || [])
+    .filter(c => c.columnId === colId)
+    .filter(c => {
+      if (filterPriority && c.priority !== filterPriority) return false;
+      if (filterLabel && !(c.labels || []).includes(filterLabel)) return false;
+      if (filterAssignee && (c.assignee || '') !== filterAssignee) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return c.title.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q);
+      }
+      return true;
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+function getBacklogCards() {
+  const proj = getProject();
+  return (proj?.cards || [])
+    .filter(c => !c.columnId || c.columnId === 'backlog')
+    .filter(c => {
+      if (filterPriority && c.priority !== filterPriority) return false;
+      if (filterLabel && !(c.labels || []).includes(filterLabel)) return false;
+      if (filterAssignee && (c.assignee || '') !== filterAssignee) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return c.title.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q);
+      }
+      return true;
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+function getStats() {
+  const proj = getProject();
+  if (!proj) return {};
+  const all = proj.cards || [];
+  const done = getDoneColumn();
+  const doneCards = done ? all.filter(c => c.columnId === done.id) : [];
+  const backlog = all.filter(c => !c.columnId || c.columnId === 'backlog');
+  const inProgress = all.filter(c => c.columnId && c.columnId !== 'backlog' && (!done || c.columnId !== done.id));
+  return {
+    total: all.length,
+    done: doneCards.length,
+    inProgress: inProgress.length,
+    backlog: backlog.length,
+    progress: all.length ? Math.round((doneCards.length / all.length) * 100) : 0
+  };
+}
+
+// ─── Dependency Helpers ────────────────────────────────────────────────────────
+function getCardById(cardId) {
+  const proj = getProject();
+  return proj?.cards.find(c => c.id === cardId);
+}
+
+// Cards that THIS card depends on (must be done before this card)
+function getBlockers(cardId) {
+  const card = getCardById(cardId);
+  if (!card) return [];
+  return (card.dependencies || []).map(id => getCardById(id)).filter(Boolean);
+}
+
+// Cards that depend on THIS card (this card blocks them)
+function getDependents(cardId) {
+  const proj = getProject();
+  if (!proj) return [];
+  return proj.cards.filter(c => (c.dependencies || []).includes(cardId));
+}
+
+// Is this card blocked? (has incomplete dependencies)
+function isBlocked(cardId) {
+  const blockers = getBlockers(cardId);
+  if (blockers.length === 0) return false;
+  const doneCol = getDoneColumn();
+  return blockers.some(b => !doneCol || b.columnId !== doneCol.id);
+}
+
+// Get count of unresolved blockers
+function getUnresolvedBlockerCount(cardId) {
+  const blockers = getBlockers(cardId);
+  const doneCol = getDoneColumn();
+  return blockers.filter(b => !doneCol || b.columnId !== doneCol.id).length;
+}
+
+// Check for circular dependency
+function wouldCreateCycle(cardId, depId) {
+  if (cardId === depId) return true;
+  const visited = new Set();
+  const stack = [depId];
+  while (stack.length) {
+    const current = stack.pop();
+    if (current === cardId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const card = getCardById(current);
+    if (card?.dependencies) {
+      stack.push(...card.dependencies);
+    }
+  }
+  // Also check reverse: does cardId already transitively depend on depId?
+  const visited2 = new Set();
+  const stack2 = [cardId];
+  while (stack2.length) {
+    const current = stack2.pop();
+    if (visited2.has(current)) continue;
+    visited2.add(current);
+    const dependents = getDependents(current);
+    for (const dep of dependents) {
+      if (dep.id === depId) return true;
+      stack2.push(dep.id);
+    }
+  }
+  return false;
+}
+
+// Get all cards involved in any dependency chain (for the graph)
+function getDependencyGraph() {
+  const proj = getProject();
+  if (!proj) return { nodes: [], edges: [] };
+  const allCards = proj.cards;
+  const edges = [];
+  const nodeIds = new Set();
+
+  allCards.forEach(card => {
+    (card.dependencies || []).forEach(depId => {
+      const depCard = getCardById(depId);
+      if (depCard) {
+        edges.push({ from: depId, to: card.id });
+        nodeIds.add(card.id);
+        nodeIds.add(depId);
+      }
+    });
+  });
+
+  // Also include cards with no deps but that are part of the project (all cards)
+  const nodes = allCards.map(c => ({
+    id: c.id,
+    title: c.title,
+    columnId: c.columnId,
+    priority: c.priority,
+    hasDeps: nodeIds.has(c.id),
+    blocked: isBlocked(c.id),
+    blockerCount: getUnresolvedBlockerCount(c.id),
+    dependentCount: getDependents(c.id).length,
+    depCount: (c.dependencies || []).length
+  }));
+
+  return { nodes, edges };
+}
+
+// ─── Actions ───────────────────────────────────────────────────────────────────
+function addProject(name) {
+  const proj = createProject(name);
+  state.projects.push(proj);
+  state.activeProjectId = proj.id;
+  persist();
+}
+
+function deleteProject(id) {
+  if (state.projects.length <= 1) return;
+  state.projects = state.projects.filter(p => p.id !== id);
+  if (state.activeProjectId === id) state.activeProjectId = state.projects[0].id;
+  persist();
+}
+
+function renameProject(id, name) {
+  const p = state.projects.find(p => p.id === id);
+  if (p) { p.name = name; persist(); }
+}
+
+function switchProject(id) {
+  state.activeProjectId = id;
+  state.view = 'board';
+  persist();
+}
+
+function addColumn(name) {
+  const proj = getProject();
+  proj.columns.push({ id: uid(), name, wipLimit: 0 });
+  persist();
+}
+
+function removeColumn(colId) {
+  const proj = getProject();
+  proj.cards.forEach(c => { if (c.columnId === colId) c.columnId = 'backlog'; });
+  proj.columns = proj.columns.filter(c => c.id !== colId);
+  persist();
+}
+
+function renameColumn(colId, name) {
+  const proj = getProject();
+  const col = proj.columns.find(c => c.id === colId);
+  if (col) { col.name = name; persist(); }
+}
+
+function setWipLimit(colId, limit) {
+  const proj = getProject();
+  const col = proj.columns.find(c => c.id === colId);
+  if (col) { col.wipLimit = Math.max(0, parseInt(limit) || 0); persist(); }
+}
+
+function moveColumnLeft(colId) {
+  const proj = getProject();
+  const idx = proj.columns.findIndex(c => c.id === colId);
+  if (idx > 0) { [proj.columns[idx - 1], proj.columns[idx]] = [proj.columns[idx], proj.columns[idx - 1]]; persist(); }
+}
+
+function moveColumnRight(colId) {
+  const proj = getProject();
+  const idx = proj.columns.findIndex(c => c.id === colId);
+  if (idx < proj.columns.length - 1) { [proj.columns[idx], proj.columns[idx + 1]] = [proj.columns[idx + 1], proj.columns[idx]]; persist(); }
+}
+
+function addCard(title, columnId = 'backlog', extra = {}) {
+  const proj = getProject();
+  const cards = columnId === 'backlog' ? getBacklogCards() : getColumnCards(columnId);
+  proj.cards.push({
+    id: uid(),
+    title,
+    description: '',
+    priority: 'medium',
+    labels: [],
+    materials: '',
+    estimatedTime: '',
+    dueDate: '',
+    subtasks: [],
+    dependencies: [],
+    assignee: '',
+    columnId,
+    order: cards.length,
+    createdAt: Date.now(),
+    ...extra
+  });
+  persist();
+}
+
+function updateCard(cardId, updates) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (card) { Object.assign(card, updates); persist(); }
+}
+
+function deleteCard(cardId) {
+  const proj = getProject();
+  // Remove this card from any other card's dependencies
+  proj.cards.forEach(c => {
+    if (c.dependencies) {
+      c.dependencies = c.dependencies.filter(id => id !== cardId);
+    }
+  });
+  proj.cards = proj.cards.filter(c => c.id !== cardId);
+  persist();
+}
+
+function moveCard(cardId, targetColId, targetIdx = -1) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (!card) return;
+  card.columnId = targetColId;
+  const colCards = proj.cards.filter(c => c.columnId === targetColId && c.id !== cardId).sort((a, b) => a.order - b.order);
+  if (targetIdx < 0) targetIdx = colCards.length;
+  colCards.splice(targetIdx, 0, card);
+  colCards.forEach((c, i) => c.order = i);
+  persist();
+}
+
+function toggleSubtask(cardId, subtaskIdx) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (card && card.subtasks[subtaskIdx]) {
+    card.subtasks[subtaskIdx].done = !card.subtasks[subtaskIdx].done;
+    persist();
+  }
+}
+
+function addSubtask(cardId, title) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (card) { card.subtasks.push({ title, done: false }); persist(); }
+}
+
+function removeSubtask(cardId, idx) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (card) { card.subtasks.splice(idx, 1); persist(); }
+}
+
+// ─── Dependency Actions ────────────────────────────────────────────────────────
+function addDependency(cardId, depId) {
+  if (cardId === depId) return;
+  if (wouldCreateCycle(cardId, depId)) {
+    alert('Cannot add this dependency — it would create a circular chain.');
+    return;
+  }
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (!card) return;
+  if (!card.dependencies) card.dependencies = [];
+  if (card.dependencies.includes(depId)) return;
+  card.dependencies.push(depId);
+  persist();
+}
+
+function removeDependency(cardId, depId) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (!card || !card.dependencies) return;
+  card.dependencies = card.dependencies.filter(id => id !== depId);
+  persist();
+}
+
+// ─── Drag & Drop ───────────────────────────────────────────────────────────────
+function onDragStart(e, cardId, colId) {
+  dragState = { cardId, sourceColId: colId };
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.classList.add('dragging');
+}
+
+function onDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  dragState = { cardId: null, sourceColId: null };
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function onDragEnter(e) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  const col = e.currentTarget;
+  if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+}
+
+function onDrop(e, targetColId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (dragState.cardId) {
+    moveCard(dragState.cardId, targetColId);
+  }
+  dragState = { cardId: null, sourceColId: null };
+}
+
+// ─── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const proj = getProject();
+  if (!proj) return;
+  const stats = getStats();
+
+  document.getElementById('app').innerHTML = `
+    <!-- Sidebar -->
+    <div class="fixed inset-y-0 left-0 z-50 ${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden">
+      <div class="w-64 h-full bg-zinc-900 border-r border-zinc-700 flex flex-col">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b border-zinc-800">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="flex gap-1.5">
+              <div class="w-3 h-3 rounded-full bg-red-500"></div>
+              <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div class="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+          </div>
+          <h1 class="font-mono font-bold text-amber-500 text-lg mt-2">DIY Kanban</h1>
+          <p class="text-xs text-zinc-500 font-mono">project planner</p>
+        </div>
+
+        <!-- Projects List -->
+        <div class="flex-1 overflow-y-auto p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-zinc-500 font-mono uppercase tracking-wider">Projects</span>
+            <button onclick="promptNewProject()" class="text-zinc-400 hover:text-amber-400 hover:bg-zinc-800 p-1 rounded-lg transition-colors" title="New Project">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
+          </div>
+          ${state.projects.map(p => `
+            <div class="group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 mb-1
+              ${p.id === state.activeProjectId ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400' : 'hover:bg-zinc-800 text-zinc-300 border border-transparent'}"
+              onclick="switchProject('${p.id}')">
+              <i data-lucide="folder" class="w-4 h-4 flex-shrink-0 ${p.id === state.activeProjectId ? 'text-amber-500' : 'text-zinc-500'}"></i>
+              <span class="font-mono text-xs truncate flex-1">${escHtml(p.name)}</span>
+              ${state.projects.length > 1 ? `
+                <button onclick="event.stopPropagation(); confirmDeleteProject('${p.id}', '${escHtml(p.name)}')"
+                  class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-0.5 rounded transition-all" title="Delete">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i>
+                </button>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Sidebar Footer -->
+        <div class="p-3 border-t border-zinc-800">
+          <div class="text-xs text-zinc-600 font-mono text-center">v1.1 • stored locally</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="${sidebarOpen ? 'ml-64' : 'ml-0'} transition-all duration-300 min-h-screen flex flex-col">
+      <!-- Header -->
+      <header class="sticky top-0 z-40 bg-zinc-900/80 backdrop-blur-sm border-b border-zinc-800">
+        <div class="flex items-center justify-between px-4 py-3">
+          <div class="flex items-center gap-3">
+            <button onclick="sidebarOpen=!sidebarOpen; render()" class="text-zinc-400 hover:text-amber-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors lg:hidden">
+              <i data-lucide="${sidebarOpen ? 'panel-left-close' : 'panel-left-open'}" class="w-5 h-5"></i>
+            </button>
+            <button onclick="sidebarOpen=!sidebarOpen; render()" class="text-zinc-400 hover:text-amber-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors hidden lg:block">
+              <i data-lucide="${sidebarOpen ? 'panel-left-close' : 'panel-left-open'}" class="w-5 h-5"></i>
+            </button>
+            <div>
+              <h2 class="font-mono font-bold text-zinc-100 text-base">${escHtml(proj.name)}</h2>
+              <div class="flex items-center gap-3 mt-0.5">
+                <span class="text-xs text-zinc-500 font-mono">${stats.total} tasks</span>
+                <span class="text-xs text-green-400 font-mono">${stats.progress}% done</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- Search -->
+            <div class="relative hidden sm:block">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"></i>
+              <input type="text" placeholder="Search cards..."
+                value="${escHtml(searchQuery)}"
+                oninput="searchQuery=this.value; render()"
+                class="bg-zinc-800 border border-zinc-700 rounded-lg pl-9 pr-3 py-1.5 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none w-48">
+            </div>
+            <!-- View Toggles -->
+            <div class="flex bg-zinc-800 rounded-lg p-0.5 border border-zinc-700">
+              <button onclick="state.view='board'; persist()"
+                class="px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${state.view === 'board' ? 'bg-amber-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:text-zinc-200'}">
+                <span class="hidden sm:inline">Board</span>
+                <i data-lucide="columns-3" class="w-4 h-4 sm:hidden"></i>
+              </button>
+              <button onclick="state.view='backlog'; persist()"
+                class="px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${state.view === 'backlog' ? 'bg-amber-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:text-zinc-200'}">
+                <span class="hidden sm:inline">Backlog</span>
+                <i data-lucide="list" class="w-4 h-4 sm:hidden"></i>
+              </button>
+              <button onclick="state.view='deps'; persist()"
+                class="px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${state.view === 'deps' ? 'bg-amber-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:text-zinc-200'}">
+                <span class="hidden sm:inline">Deps</span>
+                <i data-lucide="git-branch" class="w-4 h-4 sm:hidden"></i>
+              </button>
+              <button onclick="state.view='settings'; persist()"
+                class="px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${state.view === 'settings' ? 'bg-amber-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:text-zinc-200'}">
+                <span class="hidden sm:inline">Settings</span>
+                <i data-lucide="settings" class="w-4 h-4 sm:hidden"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Filter Bar -->
+        ${state.view !== 'deps' ? `
+        <div class="flex items-center gap-2 px-4 py-2 border-t border-zinc-800/50 overflow-x-auto">
+          <span class="text-xs text-zinc-500 font-mono flex-shrink-0">Filter:</span>
+          <select onchange="filterPriority=this.value; render()"
+            class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs font-mono text-zinc-300 focus:border-amber-500 focus:outline-none">
+            <option value="" ${!filterPriority ? 'selected' : ''}>All priorities</option>
+            ${Object.entries(PRIORITY_MAP).map(([k, v]) => `<option value="${k}" ${filterPriority === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+          </select>
+          <select onchange="filterLabel=this.value; render()"
+            class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs font-mono text-zinc-300 focus:border-amber-500 focus:outline-none">
+            <option value="" ${!filterLabel ? 'selected' : ''}>All labels</option>
+            ${proj.labels.map(l => `<option value="${l.name}" ${filterLabel === l.name ? 'selected' : ''}>${l.name}</option>`).join('')}
+          </select>
+          ${proj.members.length > 0 ? `
+          <select onchange="filterAssignee=this.value; render()"
+            class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs font-mono text-zinc-300 focus:border-amber-500 focus:outline-none">
+            <option value="" ${!filterAssignee ? 'selected' : ''}>All people</option>
+            ${proj.members.map(m => `<option value="${escHtml(m)}" ${filterAssignee === m ? 'selected' : ''}>${escHtml(m)}</option>`).join('')}
+          </select>
+          ` : ''}
+          ${(filterPriority || filterLabel || filterAssignee || searchQuery) ? `
+            <button onclick="filterPriority=''; filterLabel=''; filterAssignee=''; searchQuery=''; render()"
+              class="text-xs text-amber-400 hover:text-amber-300 font-mono px-2 py-1 hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0">
+              <i data-lucide="x" class="w-3 h-3 inline"></i> Clear
+            </button>
+          ` : ''}
+        </div>
+        ` : ''}
+      </header>
+
+      <!-- Content -->
+      <main class="flex-1 overflow-hidden">
+        ${state.view === 'board' ? renderBoard(proj) : ''}
+        ${state.view === 'backlog' ? renderBacklog(proj) : ''}
+        ${state.view === 'deps' ? renderDepsView(proj) : ''}
+        ${state.view === 'settings' ? renderSettings(proj) : ''}
+      </main>
+    </div>
+
+    ${modal ? renderModal() : ''}
+  `;
+
+  lucide.createIcons();
+  attachDragListeners();
+
+  // Draw dependency SVG lines after render
+  if (state.view === 'deps') {
+    requestAnimationFrame(() => drawDepEdges());
+  }
+}
+
+// ─── Board View ────────────────────────────────────────────────────────────────
+function renderBoard(proj) {
+  return `
+    <div class="flex gap-4 p-4 overflow-x-auto h-full" style="min-height: calc(100vh - 130px)">
+      ${proj.columns.map(col => {
+        const cards = getColumnCards(col.id);
+        const wipExceeded = col.wipLimit > 0 && cards.length > col.wipLimit;
+        return `
+          <div class="flex-shrink-0 w-72 flex flex-col" data-col-id="${col.id}">
+            <!-- Column Header -->
+            <div class="flex items-center justify-between mb-3 px-1">
+              <div class="flex items-center gap-2">
+                <h3 class="font-mono font-bold text-sm text-zinc-200">${escHtml(col.name)}</h3>
+                <span class="text-xs px-1.5 py-0.5 rounded font-mono
+                  ${wipExceeded ? 'bg-red-500/20 text-red-400' : 'bg-zinc-700 text-zinc-400'}">${cards.length}${col.wipLimit ? '/' + col.wipLimit : ''}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="promptQuickAdd('${col.id}')"
+                  class="text-zinc-500 hover:text-amber-400 p-1 rounded transition-colors" title="Add card">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+            <!-- Drop Zone -->
+            <div class="flex-1 bg-zinc-900/50 rounded-lg border border-zinc-800 p-2 space-y-2 overflow-y-auto drop-zone"
+              data-col-id="${col.id}"
+              ondragover="onDragOver(event)"
+              ondragenter="onDragEnter(event)"
+              ondragleave="onDragLeave(event)"
+              ondrop="onDrop(event, '${col.id}')">
+              ${cards.length === 0 ? `
+                <div class="flex flex-col items-center justify-center py-8 text-zinc-600">
+                  <i data-lucide="inbox" class="w-8 h-8 mb-2"></i>
+                  <span class="text-xs font-mono">Drop cards here</span>
+                </div>
+              ` : ''}
+              ${cards.map(card => renderCard(card, col.id)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+      <!-- Add Column -->
+      <div class="flex-shrink-0 w-72">
+        <button onclick="promptAddColumn()"
+          class="w-full py-8 border-2 border-dashed border-zinc-700 rounded-lg text-zinc-500 hover:border-amber-500/50 hover:text-amber-400 transition-all duration-300 font-mono text-sm flex items-center justify-center gap-2">
+          <i data-lucide="plus" class="w-4 h-4"></i> Add Column
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCard(card, colId) {
+  const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
+  const overdue = isOverdue(card);
+  const subtasksDone = (card.subtasks || []).filter(s => s.done).length;
+  const subtasksTotal = (card.subtasks || []).length;
+  const blocked = isBlocked(card.id);
+  const blockerCount = getUnresolvedBlockerCount(card.id);
+  const depCount = (card.dependencies || []).length;
+  const dependentCount = getDependents(card.id).length;
+
+  return `
+    <div class="group bg-zinc-900 border ${blocked ? 'border-red-500/40' : 'border-zinc-700'} rounded-lg p-3 cursor-grab card-enter
+      hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 relative"
+      draggable="true"
+      data-card-id="${card.id}"
+      ondragstart="onDragStart(event, '${card.id}', '${colId}')"
+      ondragend="onDragEnd(event)"
+      onclick="openCardDetail('${card.id}')">
+
+      ${blocked ? `
+        <div class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center blocked-pulse" title="${blockerCount} blocker(s)">
+          <i data-lucide="lock" class="w-3 h-3 text-white"></i>
+        </div>
+      ` : ''}
+
+      <!-- Labels -->
+      ${(card.labels || []).length ? `
+        <div class="flex flex-wrap gap-1 mb-2">
+          ${card.labels.map(l => {
+            const proj = getProject();
+            const labelDef = proj.labels.find(x => x.name === l);
+            const lc = labelDef ? LABEL_COLORS[labelDef.color] : LABEL_COLORS.zinc;
+            return `<span class="text-xs px-1.5 py-0.5 rounded font-mono ${lc.bg} ${lc.text}">${escHtml(l)}</span>`;
+          }).join('')}
+        </div>
+      ` : ''}
+
+      <!-- Title -->
+      <p class="text-sm text-zinc-100 font-medium mb-2">${escHtml(card.title)}</p>
+
+      <!-- Meta Row -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- Priority -->
+        <span class="text-xs px-1.5 py-0.5 rounded font-mono ${pri.bg} ${pri.color} flex items-center gap-1">
+          <i data-lucide="${pri.icon}" class="w-3 h-3"></i>
+          ${pri.label}
+        </span>
+
+        ${card.estimatedTime ? `
+          <span class="text-xs text-zinc-500 font-mono flex items-center gap-1">
+            <i data-lucide="clock" class="w-3 h-3"></i>${escHtml(card.estimatedTime)}
+          </span>
+        ` : ''}
+
+        ${card.dueDate ? `
+          <span class="text-xs font-mono flex items-center gap-1 ${overdue ? 'text-red-400' : 'text-zinc-500'}">
+            <i data-lucide="calendar" class="w-3 h-3"></i>${formatDate(card.dueDate)}
+          </span>
+        ` : ''}
+
+        ${subtasksTotal > 0 ? `
+          <span class="text-xs font-mono flex items-center gap-1 ${subtasksDone === subtasksTotal ? 'text-green-400' : 'text-zinc-500'}">
+            <i data-lucide="check-square" class="w-3 h-3"></i>${subtasksDone}/${subtasksTotal}
+          </span>
+        ` : ''}
+
+        ${card.materials ? `
+          <span class="text-xs text-zinc-500 font-mono flex items-center gap-1">
+            <i data-lucide="package" class="w-3 h-3"></i>
+          </span>
+        ` : ''}
+
+        ${depCount > 0 || dependentCount > 0 ? `
+          <span class="text-xs font-mono flex items-center gap-1 ${blocked ? 'text-red-400' : 'text-cyan-400'}" title="${depCount} dep(s), ${dependentCount} dependent(s)">
+            <i data-lucide="git-branch" class="w-3 h-3"></i>${depCount}/${dependentCount}
+          </span>
+        ` : ''}
+
+        ${card.assignee ? `
+          <span class="ml-auto" title="${escHtml(card.assignee)}">
+            <div class="${getAvatarClasses(card.assignee, 'xs')}">${getInitials(card.assignee)}</div>
+          </span>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Backlog View ──────────────────────────────────────────────────────────────
+function renderBacklog(proj) {
+  const cards = getBacklogCards();
+  return `
+    <div class="max-w-4xl mx-auto p-4 sm:p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="layers" class="w-5 h-5 text-amber-500"></i>
+          <h2 class="font-mono font-bold text-lg text-zinc-100">Backlog</h2>
+          <span class="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-400 rounded font-mono">${cards.length}</span>
+        </div>
+        <button onclick="promptQuickAdd('backlog')"
+          class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+          <i data-lucide="plus" class="w-4 h-4"></i> Add Task
+        </button>
+      </div>
+
+      ${cards.length === 0 ? `
+        <div class="flex flex-col items-center justify-center py-16 text-zinc-600">
+          <i data-lucide="clipboard-list" class="w-12 h-12 mb-3"></i>
+          <p class="font-mono text-sm mb-1">Backlog is empty</p>
+          <p class="text-xs text-zinc-600">Add tasks to plan your project</p>
+        </div>
+      ` : ''}
+
+      <div class="space-y-2">
+        ${cards.map(card => {
+          const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
+          const overdue = isOverdue(card);
+          const subtasksDone = (card.subtasks || []).filter(s => s.done).length;
+          const subtasksTotal = (card.subtasks || []).length;
+          const blocked = isBlocked(card.id);
+          const depCount = (card.dependencies || []).length;
+          const dependentCount = getDependents(card.id).length;
+          return `
+            <div class="bg-zinc-900 border ${blocked ? 'border-red-500/40' : 'border-zinc-700'} rounded-lg p-4 flex items-start gap-4
+              hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 cursor-pointer group relative"
+              onclick="openCardDetail('${card.id}')"
+              draggable="true"
+              data-card-id="${card.id}"
+              ondragstart="onDragStart(event, '${card.id}', 'backlog')"
+              ondragend="onDragEnd(event)">
+
+              ${blocked ? `
+                <div class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center blocked-pulse" title="Blocked">
+                  <i data-lucide="lock" class="w-3 h-3 text-white"></i>
+                </div>
+              ` : ''}
+
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="font-medium text-zinc-100 truncate">${escHtml(card.title)}</p>
+                </div>
+                ${card.description ? `<p class="text-xs text-zinc-500 line-clamp-2 mb-2">${escHtml(card.description)}</p>` : ''}
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono ${pri.bg} ${pri.color} flex items-center gap-1">
+                    <i data-lucide="${pri.icon}" class="w-3 h-3"></i>${pri.label}
+                  </span>
+                  ${(card.labels || []).map(l => {
+                    const labelDef = proj.labels.find(x => x.name === l);
+                    const lc = labelDef ? LABEL_COLORS[labelDef.color] : LABEL_COLORS.zinc;
+                    return `<span class="text-xs px-1.5 py-0.5 rounded font-mono ${lc.bg} ${lc.text}">${escHtml(l)}</span>`;
+                  }).join('')}
+                  ${card.estimatedTime ? `<span class="text-xs text-zinc-500 font-mono flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i>${escHtml(card.estimatedTime)}</span>` : ''}
+                  ${card.dueDate ? `<span class="text-xs font-mono flex items-center gap-1 ${overdue ? 'text-red-400' : 'text-zinc-500'}"><i data-lucide="calendar" class="w-3 h-3"></i>${formatDate(card.dueDate)}</span>` : ''}
+                  ${subtasksTotal > 0 ? `<span class="text-xs font-mono flex items-center gap-1 ${subtasksDone === subtasksTotal ? 'text-green-400' : 'text-zinc-500'}"><i data-lucide="check-square" class="w-3 h-3"></i>${subtasksDone}/${subtasksTotal}</span>` : ''}
+                  ${depCount > 0 || dependentCount > 0 ? `
+                    <span class="text-xs font-mono flex items-center gap-1 ${blocked ? 'text-red-400' : 'text-cyan-400'}">
+                      <i data-lucide="git-branch" class="w-3 h-3"></i>${depCount}/${dependentCount}
+                    </span>
+                  ` : ''}
+                  ${card.assignee ? `<span class="ml-auto" title="${escHtml(card.assignee)}"><div class="${getAvatarClasses(card.assignee, 'xs')}">${getInitials(card.assignee)}</div></span>` : ''}
+                </div>
+              </div>
+
+              <!-- Move to Board -->
+              <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                <select onclick="event.stopPropagation()" onchange="event.stopPropagation(); if(this.value) { moveCard('${card.id}', this.value); }"
+                  class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs font-mono text-zinc-300 focus:border-amber-500 focus:outline-none">
+                  <option value="">Move to…</option>
+                  ${proj.columns.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Dependencies View ─────────────────────────────────────────────────────────
+function renderDepsView(proj) {
+  const graph = getDependencyGraph();
+  const allCards = proj.cards;
+  const doneCol = getDoneColumn();
+
+  // Separate: cards with dependencies, and cards without
+  const withDeps = graph.nodes.filter(n => n.hasDeps);
+  const withoutDeps = graph.nodes.filter(n => !n.hasDeps);
+  const totalEdges = graph.edges.length;
+
+  // Count blocked cards
+  const blockedCards = allCards.filter(c => isBlocked(c.id));
+
+  // Build adjacency for topological-like grouping
+  // Group into layers by dependency depth
+  function getDepthMap() {
+    const depths = {};
+    const visited = new Set();
+    function getDepth(cardId) {
+      if (visited.has(cardId)) return depths[cardId] || 0;
+      visited.add(cardId);
+      const card = getCardById(cardId);
+      if (!card || !card.dependencies || card.dependencies.length === 0) {
+        depths[cardId] = 0;
+        return 0;
+      }
+      let maxParentDepth = 0;
+      for (const depId of card.dependencies) {
+        maxParentDepth = Math.max(maxParentDepth, getDepth(depId) + 1);
+      }
+      depths[cardId] = maxParentDepth;
+      return maxParentDepth;
+    }
+    allCards.forEach(c => getDepth(c.id));
+    return depths;
+  }
+  const depthMap = getDepthMap();
+
+  return `
+    <div class="p-4 sm:p-6 overflow-auto" style="min-height: calc(100vh - 100px)">
+      <!-- Header Row -->
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+          <i data-lucide="git-branch" class="w-5 h-5 text-amber-500"></i>
+          <h2 class="font-mono font-bold text-lg text-zinc-100">Dependencies</h2>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <span class="flex items-center gap-1 text-zinc-400"><span class="w-2 h-2 rounded-full bg-cyan-500 inline-block"></span> ${totalEdges} link${totalEdges !== 1 ? 's' : ''}</span>
+            <span class="flex items-center gap-1 text-red-400"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> ${blockedCards.length} blocked</span>
+          </div>
+        </div>
+      </div>
+
+      ${allCards.length === 0 ? `
+        <div class="flex flex-col items-center justify-center py-20 text-zinc-600">
+          <i data-lucide="git-branch" class="w-12 h-12 mb-3"></i>
+          <p class="font-mono text-sm mb-1">No tasks yet</p>
+          <p class="text-xs">Add tasks to see their dependencies</p>
+        </div>
+      ` : totalEdges === 0 ? `
+        <div class="flex flex-col items-center justify-center py-16 text-zinc-600 mb-8">
+          <i data-lucide="unlink" class="w-10 h-10 mb-3"></i>
+          <p class="font-mono text-sm mb-1">No dependencies defined</p>
+          <p class="text-xs text-zinc-600">Open a card and add dependencies in the detail view</p>
+        </div>
+      ` : `
+        <!-- Visual Dependency Graph -->
+        <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5 mb-6 dep-graph-container overflow-x-auto">
+          <div class="flex gap-1.5 mb-4">
+            <div class="w-3 h-3 rounded-full bg-red-500"></div>
+            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+          </div>
+          ${renderDepGraph(proj, graph, depthMap, doneCol)}
+        </div>
+      `}
+
+      <!-- Dependency List (table style) -->
+      ${totalEdges > 0 ? `
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden">
+        <div class="px-5 py-3 border-b border-zinc-800 flex items-center gap-2">
+          <i data-lucide="list" class="w-4 h-4 text-amber-500"></i>
+          <h3 class="font-mono font-bold text-sm text-zinc-200">All Dependency Links</h3>
+        </div>
+        <div class="divide-y divide-zinc-800">
+          ${graph.edges.map(edge => {
+            const fromCard = getCardById(edge.from);
+            const toCard = getCardById(edge.to);
+            if (!fromCard || !toCard) return '';
+            const fromDone = doneCol && fromCard.columnId === doneCol.id;
+            const fromColName = getColName(fromCard.columnId, proj);
+            const toColName = getColName(toCard.columnId, proj);
+            return `
+              <div class="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/50 transition-colors text-sm">
+                <div class="flex-1 min-w-0 flex items-center gap-2">
+                  <span class="font-mono text-xs px-1.5 py-0.5 rounded ${fromDone ? 'bg-green-500/20 text-green-400' : 'bg-zinc-700 text-zinc-400'}">${escHtml(fromColName)}</span>
+                  <button onclick="openCardDetail('${fromCard.id}')" class="text-zinc-200 hover:text-amber-400 truncate transition-colors">${escHtml(fromCard.title)}</button>
+                </div>
+                <div class="flex-shrink-0 flex items-center gap-1 ${fromDone ? 'text-green-500' : 'text-red-400'}">
+                  <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                  <span class="text-xs font-mono">${fromDone ? 'resolved' : 'blocks'}</span>
+                </div>
+                <div class="flex-1 min-w-0 flex items-center gap-2">
+                  <span class="font-mono text-xs px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">${escHtml(toColName)}</span>
+                  <button onclick="openCardDetail('${toCard.id}')" class="text-zinc-200 hover:text-amber-400 truncate transition-colors">${escHtml(toCard.title)}</button>
+                </div>
+                <button onclick="removeDependency('${toCard.id}', '${fromCard.id}')"
+                  class="flex-shrink-0 text-zinc-600 hover:text-red-400 p-1 rounded transition-colors" title="Remove link">
+                  <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
+
+      <!-- Blocked Cards Summary -->
+      ${blockedCards.length > 0 ? `
+      <div class="bg-zinc-900 border border-red-500/30 rounded-lg overflow-hidden mt-6">
+        <div class="px-5 py-3 border-b border-zinc-800 flex items-center gap-2">
+          <i data-lucide="lock" class="w-4 h-4 text-red-400"></i>
+          <h3 class="font-mono font-bold text-sm text-red-400">Blocked Tasks</h3>
+          <span class="text-xs px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded font-mono">${blockedCards.length}</span>
+        </div>
+        <div class="divide-y divide-zinc-800">
+          ${blockedCards.map(card => {
+            const blockers = getBlockers(card.id).filter(b => !doneCol || b.columnId !== doneCol.id);
+            return `
+              <div class="px-5 py-3 hover:bg-zinc-800/50 transition-colors">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <button onclick="openCardDetail('${card.id}')" class="font-medium text-zinc-200 hover:text-amber-400 transition-colors">${escHtml(card.title)}</button>
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">${getColName(card.columnId, proj)}</span>
+                </div>
+                <div class="flex items-center gap-1 text-xs text-zinc-500">
+                  <span class="font-mono text-red-400">blocked by:</span>
+                  ${blockers.map(b => `
+                    <button onclick="openCardDetail('${b.id}')" class="px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded font-mono hover:bg-red-500/20 transition-colors">${escHtml(b.title)}</button>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function getColName(colId, proj) {
+  if (!colId || colId === 'backlog') return 'Backlog';
+  const col = proj.columns.find(c => c.id === colId);
+  return col ? col.name : 'Unknown';
+}
+
+// ─── SVG Dependency Graph ──────────────────────────────────────────────────────
+function renderDepGraph(proj, graph, depthMap, doneCol) {
+  // Only show cards that are part of the dependency graph
+  const graphCardIds = new Set();
+  graph.edges.forEach(e => { graphCardIds.add(e.from); graphCardIds.add(e.to); });
+  if (graphCardIds.size === 0) return '';
+
+  const graphCards = [...graphCardIds].map(id => getCardById(id)).filter(Boolean);
+
+  // Group by depth layer
+  const layers = {};
+  graphCards.forEach(c => {
+    const depth = depthMap[c.id] || 0;
+    if (!layers[depth]) layers[depth] = [];
+    layers[depth].push(c);
+  });
+  const layerKeys = Object.keys(layers).map(Number).sort((a, b) => a - b);
+
+  // Layout constants
+  const nodeW = 200;
+  const nodeH = 56;
+  const gapX = 80;
+  const gapY = 24;
+  const padX = 40;
+  const padY = 40;
+
+  // Compute positions
+  const positions = {};
+  let maxRowSize = 0;
+  layerKeys.forEach(layer => { maxRowSize = Math.max(maxRowSize, layers[layer].length); });
+
+  layerKeys.forEach((layer, layerIdx) => {
+    const row = layers[layer];
+    const rowWidth = row.length * nodeW + (row.length - 1) * gapY;
+    const totalWidth = maxRowSize * nodeW + (maxRowSize - 1) * gapY;
+    const offsetX = (totalWidth - rowWidth) / 2;
+    row.forEach((card, i) => {
+      positions[card.id] = {
+        x: padX + offsetX + i * (nodeW + gapY),
+        y: padY + layerIdx * (nodeH + gapX)
+      };
+    });
+  });
+
+  const svgW = padX * 2 + maxRowSize * nodeW + (maxRowSize - 1) * gapY;
+  const svgH = padY * 2 + layerKeys.length * (nodeH + gapX);
+
+  // Build edges SVG
+  const edgesSvg = graph.edges.map(edge => {
+    const from = positions[edge.from];
+    const to = positions[edge.to];
+    if (!from || !to) return '';
+    const fromCard = getCardById(edge.from);
+    const isDone = doneCol && fromCard && fromCard.columnId === doneCol.id;
+    const cls = isDone ? 'dep-edge dep-edge-ok' : 'dep-edge dep-edge-blocked';
+
+    const x1 = from.x + nodeW / 2;
+    const y1 = from.y + nodeH;
+    const x2 = to.x + nodeW / 2;
+    const y2 = to.y;
+    const midY = (y1 + y2) / 2;
+
+    return `<path d="M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}" class="${cls}"/>`;
+  }).join('');
+
+  // Build nodes SVG
+  const nodesSvg = graphCards.map(card => {
+    const pos = positions[card.id];
+    if (!pos) return '';
+    const isDone = doneCol && card.columnId === doneCol.id;
+    const blocked = isBlocked(card.id);
+    const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
+    const borderColor = blocked ? '#ef4444' : isDone ? '#22c55e' : '#3f3f46';
+    const bgColor = blocked ? '#1c0a0a' : isDone ? '#0a1c0a' : '#18181b';
+    const titleColor = isDone ? '#86efac' : '#f4f4f5';
+    const truncTitle = card.title.length > 22 ? card.title.slice(0, 22) + '…' : card.title;
+    const colName = getColName(card.columnId, proj);
+
+    return `
+      <g class="dep-node" onclick="openCardDetail('${card.id}')" data-dep-node="${card.id}">
+        <rect x="${pos.x}" y="${pos.y}" width="${nodeW}" height="${nodeH}" rx="8"
+          fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5" class="dep-node-border"/>
+        ${blocked ? `<circle cx="${pos.x + nodeW - 6}" cy="${pos.y + 6}" r="6" fill="#ef4444"/>
+          <text x="${pos.x + nodeW - 6}" y="${pos.y + 9.5}" text-anchor="middle" fill="white" font-size="9" font-family="JetBrains Mono">!</text>` : ''}
+        ${isDone ? `<circle cx="${pos.x + nodeW - 6}" cy="${pos.y + 6}" r="6" fill="#22c55e"/>
+          <text x="${pos.x + nodeW - 6}" y="${pos.y + 10}" text-anchor="middle" fill="white" font-size="10" font-family="JetBrains Mono">✓</text>` : ''}
+        <text x="${pos.x + 12}" y="${pos.y + 24}" fill="${titleColor}" font-size="12" font-weight="600" font-family="Inter, sans-serif">${escHtml(truncTitle)}</text>
+        <text x="${pos.x + 12}" y="${pos.y + 42}" fill="#71717a" font-size="10" font-family="JetBrains Mono">${escHtml(colName)}</text>
+      </g>
+    `;
+  }).join('');
+
+  return `
+    <div style="overflow-x:auto; overflow-y:auto; max-height: 500px;">
+      <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="min-width:${svgW}px">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" fill="currentColor">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#71717a"/>
+          </marker>
+          <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444"/>
+          </marker>
+          <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22c55e"/>
+          </marker>
+        </defs>
+        ${edgesSvg}
+        ${nodesSvg}
+      </svg>
+    </div>
+  `;
+}
+
+function drawDepEdges() {
+  // Edges are drawn in SVG inline, no post-render needed
+}
+
+// ─── Settings View ─────────────────────────────────────────────────────────────
+function renderSettings(proj) {
+  return `
+    <div class="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+      <!-- Project Settings -->
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-zinc-100 mb-4 flex items-center gap-2">
+          <i data-lucide="folder-cog" class="w-5 h-5 text-amber-500"></i> Project Settings
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-zinc-500 font-mono block mb-1">Project Name</label>
+            <input type="text" value="${escHtml(proj.name)}"
+              onchange="renameProject('${proj.id}', this.value)"
+              class="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none w-full">
+          </div>
+        </div>
+      </div>
+
+      <!-- Column Configuration -->
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-zinc-100 mb-4 flex items-center gap-2">
+          <i data-lucide="columns-3" class="w-5 h-5 text-amber-500"></i> Board Columns
+        </h3>
+        <div class="space-y-2">
+          ${proj.columns.map((col, idx) => `
+            <div class="flex items-center gap-2 bg-zinc-800 rounded-lg p-3 border border-zinc-700">
+              <div class="flex flex-col gap-0.5">
+                <button onclick="moveColumnLeft('${col.id}')" ${idx === 0 ? 'disabled' : ''}
+                  class="${idx === 0 ? 'text-zinc-700' : 'text-zinc-400 hover:text-amber-400'} transition-colors">
+                  <i data-lucide="chevron-up" class="w-3 h-3"></i>
+                </button>
+                <button onclick="moveColumnRight('${col.id}')" ${idx === proj.columns.length - 1 ? 'disabled' : ''}
+                  class="${idx === proj.columns.length - 1 ? 'text-zinc-700' : 'text-zinc-400 hover:text-amber-400'} transition-colors">
+                  <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                </button>
+              </div>
+              <input type="text" value="${escHtml(col.name)}"
+                onchange="renameColumn('${col.id}', this.value)"
+                class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+              <div class="flex items-center gap-1">
+                <label class="text-xs text-zinc-500 font-mono whitespace-nowrap">WIP:</label>
+                <input type="number" value="${col.wipLimit}" min="0"
+                  onchange="setWipLimit('${col.id}', this.value)"
+                  class="w-14 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm font-mono text-zinc-100 text-center focus:border-amber-500 focus:outline-none">
+              </div>
+              <button onclick="confirmRemoveColumn('${col.id}', '${escHtml(col.name)}')"
+                class="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors" title="Remove column">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          `).join('')}
+        </div>
+        <button onclick="promptAddColumn()"
+          class="mt-3 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+          <i data-lucide="plus" class="w-3 h-3"></i> Add Column
+        </button>
+      </div>
+
+      <!-- Team Members -->
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-zinc-100 mb-4 flex items-center gap-2">
+          <i data-lucide="users" class="w-5 h-5 text-amber-500"></i> Team Members
+        </h3>
+        <div class="flex flex-wrap gap-2 mb-3">
+          ${proj.members.map(m => `
+            <div class="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700 group">
+              <div class="${getAvatarClasses(m, 'sm')}">${getInitials(m)}</div>
+              <span class="text-sm font-mono text-zinc-200">${escHtml(m)}</span>
+              <button onclick="removeMember('${escHtml(m)}')"
+                class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-all ml-1">
+                <i data-lucide="x" class="w-3 h-3"></i>
+              </button>
+            </div>
+          `).join('')}
+          ${proj.members.length === 0 ? `<p class="text-xs text-zinc-600 italic">No team members added yet</p>` : ''}
+        </div>
+        <div class="flex gap-2">
+          <input type="text" id="newMemberInput" placeholder="Name…"
+            onkeydown="if(event.key==='Enter' && this.value.trim()){addMember(this.value.trim()); this.value='';}"
+            class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+          <button onclick="const inp=document.getElementById('newMemberInput'); if(inp.value.trim()){addMember(inp.value.trim()); inp.value='';}"
+            class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-2 rounded-lg transition-colors flex items-center gap-1">
+            <i data-lucide="user-plus" class="w-3 h-3"></i> Add
+          </button>
+        </div>
+      </div>
+
+      <!-- Labels Configuration -->
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-zinc-100 mb-4 flex items-center gap-2">
+          <i data-lucide="tags" class="w-5 h-5 text-amber-500"></i> Labels
+        </h3>
+        <div class="flex flex-wrap gap-2 mb-3">
+          ${proj.labels.map(l => {
+            const lc = LABEL_COLORS[l.color];
+            return `
+              <div class="flex items-center gap-1.5 ${lc.bg} px-2.5 py-1 rounded-lg group">
+                <div class="w-2.5 h-2.5 rounded-full ${lc.dot}"></div>
+                <span class="text-xs font-mono ${lc.text}">${escHtml(l.name)}</span>
+                <button onclick="removeLabelFromProject('${escHtml(l.name)}')"
+                  class="opacity-0 group-hover:opacity-100 ${lc.text} hover:text-red-400 transition-all ml-1">
+                  <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        <button onclick="promptAddLabel()"
+          class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+          <i data-lucide="plus" class="w-3 h-3"></i> Add Label
+        </button>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="bg-zinc-900 border border-red-500/30 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-red-400 mb-3 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i> Danger Zone
+        </h3>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-zinc-300">Export Project Data</p>
+            <p class="text-xs text-zinc-500">Download all project data as JSON</p>
+          </div>
+          <button onclick="exportData()"
+            class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors">
+            Export JSON
+          </button>
+        </div>
+        <div class="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+          <div>
+            <p class="text-sm text-zinc-300">Import Project Data</p>
+            <p class="text-xs text-zinc-500">Load data from a JSON export</p>
+          </div>
+          <label class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+            Import JSON
+            <input type="file" accept=".json" onchange="importData(event)" class="hidden">
+          </label>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Card Detail Modal ─────────────────────────────────────────────────────────
+function renderModal() {
+  if (modal?.type === 'card-detail') return renderCardDetailModal(modal.data);
+  return '';
+}
+
+function renderCardDetailModal(card) {
+  const proj = getProject();
+  const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
+  const currentCol = proj.columns.find(c => c.id === card.columnId);
+  const subtasksDone = (card.subtasks || []).filter(s => s.done).length;
+  const subtasksTotal = (card.subtasks || []).length;
+
+  // Dependency info (read live from state, not stale modal.data)
+  const liveCard = getCardById(card.id);
+  const blockers = liveCard ? getBlockers(liveCard.id) : [];
+  const dependents = liveCard ? getDependents(liveCard.id) : [];
+  const blocked = liveCard ? isBlocked(liveCard.id) : false;
+  const doneCol = getDoneColumn();
+
+  // Available cards to add as dependency (excluding self, existing deps, and would-create-cycle)
+  const availableForDep = proj.cards.filter(c =>
+    c.id !== card.id &&
+    !(liveCard?.dependencies || []).includes(c.id) &&
+    !wouldCreateCycle(card.id, c.id)
+  );
+
+  return `
+    <div class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-start justify-center p-4 pt-12 overflow-y-auto fade-in"
+      onclick="if(event.target===this){closeModal();}">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-2xl slide-in" onclick="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between p-5 border-b border-zinc-800">
+          <div class="flex items-center gap-3 flex-1 min-w-0">
+            <i data-lucide="clipboard" class="w-5 h-5 text-amber-500 flex-shrink-0"></i>
+            <input type="text" value="${escHtml(card.title)}"
+              onchange="updateCard('${card.id}', {title: this.value}); modal.data.title = this.value;"
+              class="flex-1 bg-transparent border-none text-lg font-mono font-bold text-zinc-100 focus:outline-none">
+            ${blocked ? `<span class="flex-shrink-0 text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded font-mono flex items-center gap-1 blocked-pulse"><i data-lucide="lock" class="w-3 h-3"></i>Blocked</span>` : ''}
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button onclick="confirmDeleteCard('${card.id}')"
+              class="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors" title="Delete">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+            <button onclick="closeModal()"
+              class="text-zinc-500 hover:text-zinc-300 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-5 space-y-5">
+          <!-- Status & Priority Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">Status</label>
+              <select onchange="updateCard('${card.id}', {columnId: this.value}); modal.data.columnId = this.value; render();"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+                <option value="backlog" ${card.columnId === 'backlog' ? 'selected' : ''}>Backlog</option>
+                ${proj.columns.map(c => `<option value="${c.id}" ${card.columnId === c.id ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">Priority</label>
+              <select onchange="updateCard('${card.id}', {priority: this.value}); modal.data.priority = this.value; render();"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+                ${Object.entries(PRIORITY_MAP).map(([k, v]) => `<option value="${k}" ${card.priority === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">Due Date</label>
+              <input type="date" value="${card.dueDate || ''}"
+                onchange="updateCard('${card.id}', {dueDate: this.value}); modal.data.dueDate = this.value;"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Assignee & Estimated Time -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1 flex items-center gap-1">
+                <i data-lucide="user" class="w-3 h-3"></i> Assignee
+              </label>
+              <div class="flex gap-2">
+                <select onchange="updateCard('${card.id}', {assignee: this.value}); modal.data.assignee = this.value; render();"
+                  class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+                  <option value="" ${!card.assignee ? 'selected' : ''}>Unassigned</option>
+                  ${proj.members.map(m => `<option value="${escHtml(m)}" ${card.assignee === m ? 'selected' : ''}>${escHtml(m)}</option>`).join('')}
+                </select>
+                ${card.assignee ? `<div class="${getAvatarClasses(card.assignee, 'md')}" title="${escHtml(card.assignee)}">${getInitials(card.assignee)}</div>` : ''}
+              </div>
+              ${proj.members.length === 0 ? `<p class="text-xs text-zinc-600 mt-1">Add team members in Settings</p>` : ''}
+            </div>
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">Estimated Time</label>
+              <input type="text" value="${escHtml(card.estimatedTime || '')}" placeholder="e.g., 2h, 1 day, 3 weekends…"
+                onchange="updateCard('${card.id}', {estimatedTime: this.value}); modal.data.estimatedTime = this.value;"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div>
+            <label class="text-xs text-zinc-500 font-mono block mb-1">Description</label>
+            <textarea rows="3" placeholder="Describe the task…"
+              onchange="updateCard('${card.id}', {description: this.value}); modal.data.description = this.value;"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none resize-y">${escHtml(card.description || '')}</textarea>
+          </div>
+
+          <!-- Materials -->
+          <div>
+            <label class="text-xs text-zinc-500 font-mono block mb-1 flex items-center gap-1">
+              <i data-lucide="package" class="w-3 h-3"></i> Materials Needed
+            </label>
+            <textarea rows="2" placeholder="List materials, tools, parts…"
+              onchange="updateCard('${card.id}', {materials: this.value}); modal.data.materials = this.value;"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none resize-y">${escHtml(card.materials || '')}</textarea>
+          </div>
+
+          <!-- Labels -->
+          <div>
+            <label class="text-xs text-zinc-500 font-mono block mb-2">Labels</label>
+            <div class="flex flex-wrap gap-2">
+              ${proj.labels.map(l => {
+                const lc = LABEL_COLORS[l.color];
+                const active = (card.labels || []).includes(l.name);
+                return `
+                  <button onclick="toggleCardLabel('${card.id}', '${escHtml(l.name)}')"
+                    class="text-xs px-2.5 py-1 rounded-lg font-mono transition-all flex items-center gap-1.5
+                    ${active ? lc.bg + ' ' + lc.text + ' border border-current/30' : 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:border-zinc-600'}">
+                    <div class="w-2 h-2 rounded-full ${lc.dot} ${active ? '' : 'opacity-40'}"></div>
+                    ${escHtml(l.name)}
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Dependencies Section -->
+          <div class="border-t border-zinc-800 pt-5">
+            <div class="flex items-center justify-between mb-3">
+              <label class="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
+                <i data-lucide="git-branch" class="w-3.5 h-3.5 text-amber-500"></i>
+                Dependencies
+                ${blockers.length > 0 ? `<span class="px-1.5 py-0.5 rounded ${blocked ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'} font-mono">${blockers.length}</span>` : ''}
+              </label>
+            </div>
+
+            <!-- Blocked By (this card depends on) -->
+            <div class="mb-3">
+              <p class="text-xs text-zinc-600 font-mono mb-1.5">Blocked by <span class="text-zinc-500">(must finish first)</span></p>
+              ${blockers.length > 0 ? `
+                <div class="space-y-1.5 mb-2">
+                  ${blockers.map(b => {
+                    const bDone = doneCol && b.columnId === doneCol.id;
+                    const bColName = getColName(b.columnId, proj);
+                    return `
+                      <div class="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2 group/dep">
+                        <div class="w-2 h-2 rounded-full ${bDone ? 'bg-green-500' : 'bg-red-500'} flex-shrink-0"></div>
+                        <button onclick="event.stopPropagation(); closeModal(); setTimeout(() => openCardDetail('${b.id}'), 100)"
+                          class="flex-1 text-left text-sm ${bDone ? 'text-zinc-500 line-through' : 'text-zinc-200'} hover:text-amber-400 truncate transition-colors">${escHtml(b.title)}</button>
+                        <span class="text-xs font-mono px-1.5 py-0.5 rounded ${bDone ? 'bg-green-500/20 text-green-400' : 'bg-zinc-700 text-zinc-400'}">${escHtml(bColName)}</span>
+                        <button onclick="event.stopPropagation(); removeDependency('${card.id}', '${b.id}'); openCardDetail('${card.id}')"
+                          class="opacity-0 group-hover/dep:opacity-100 text-zinc-600 hover:text-red-400 p-0.5 rounded transition-all" title="Remove">
+                          <i data-lucide="x" class="w-3 h-3"></i>
+                        </button>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              ` : `<p class="text-xs text-zinc-700 italic mb-2">No blockers</p>`}
+
+              <!-- Add Dependency Dropdown -->
+              ${availableForDep.length > 0 ? `
+                <div class="flex gap-2">
+                  <select id="depSelect"
+                    class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-300 focus:border-amber-500 focus:outline-none">
+                    <option value="">Add a blocker…</option>
+                    ${availableForDep.map(c => `<option value="${c.id}">${escHtml(c.title)}</option>`).join('')}
+                  </select>
+                  <button onclick="const sel=document.getElementById('depSelect'); if(sel.value){addDependency('${card.id}', sel.value); openCardDetail('${card.id}');}"
+                    class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                    <i data-lucide="plus" class="w-3 h-3"></i> Add
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Blocks (cards that depend on this card) -->
+            ${dependents.length > 0 ? `
+              <div>
+                <p class="text-xs text-zinc-600 font-mono mb-1.5">Blocks <span class="text-zinc-500">(waiting on this card)</span></p>
+                <div class="space-y-1.5">
+                  ${dependents.map(d => {
+                    const dColName = getColName(d.columnId, proj);
+                    return `
+                      <div class="flex items-center gap-2 bg-zinc-800/50 rounded-lg px-3 py-2">
+                        <i data-lucide="arrow-right" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                        <button onclick="event.stopPropagation(); closeModal(); setTimeout(() => openCardDetail('${d.id}'), 100)"
+                          class="flex-1 text-left text-sm text-zinc-300 hover:text-amber-400 truncate transition-colors">${escHtml(d.title)}</button>
+                        <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">${escHtml(dColName)}</span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Subtasks -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs text-zinc-500 font-mono flex items-center gap-1">
+                <i data-lucide="check-square" class="w-3 h-3"></i>
+                Subtasks ${subtasksTotal > 0 ? `(${subtasksDone}/${subtasksTotal})` : ''}
+              </label>
+            </div>
+            ${subtasksTotal > 0 ? `
+              <div class="h-1.5 bg-zinc-800 rounded-full mb-3 overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-amber-500 to-green-500 rounded-full transition-all duration-500"
+                  style="width: ${subtasksTotal ? (subtasksDone / subtasksTotal * 100) : 0}%"></div>
+              </div>
+            ` : ''}
+            <div class="space-y-1.5 mb-2">
+              ${(card.subtasks || []).map((st, idx) => `
+                <div class="flex items-center gap-2 group/st">
+                  <button onclick="event.stopPropagation(); toggleSubtask('${card.id}', ${idx})"
+                    class="flex-shrink-0 w-5 h-5 rounded border ${st.done ? 'bg-amber-500 border-amber-500' : 'border-zinc-600 hover:border-amber-500'} flex items-center justify-center transition-colors">
+                    ${st.done ? '<i data-lucide="check" class="w-3 h-3 text-zinc-900"></i>' : ''}
+                  </button>
+                  <span class="flex-1 text-sm ${st.done ? 'line-through text-zinc-600' : 'text-zinc-300'}">${escHtml(st.title)}</span>
+                  <button onclick="event.stopPropagation(); removeSubtask('${card.id}', ${idx}); openCardDetail('${card.id}')"
+                    class="opacity-0 group-hover/st:opacity-100 text-zinc-600 hover:text-red-400 transition-all">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+            <div class="flex gap-2">
+              <input type="text" id="newSubtask" placeholder="Add a subtask…"
+                onkeydown="if(event.key==='Enter' && this.value.trim()){addSubtask('${card.id}', this.value.trim()); openCardDetail('${card.id}');}"
+                class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+              <button onclick="const inp=document.getElementById('newSubtask'); if(inp.value.trim()){addSubtask('${card.id}', inp.value.trim()); openCardDetail('${card.id}');}"
+                class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors">
+                Add
+              </button>
+            </div>
+          </div>
+
+          <!-- Metadata -->
+          <div class="pt-3 border-t border-zinc-800 flex items-center gap-4 text-xs text-zinc-600 font-mono">
+            <span>Created ${formatDate(card.createdAt)}</span>
+            <span>ID: ${card.id}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── UI Actions ────────────────────────────────────────────────────────────────
+function openCardDetail(cardId) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (card) { modal = { type: 'card-detail', data: { ...card } }; render(); }
+}
+
+function closeModal() {
+  modal = null;
+  render();
+}
+
+function toggleCardLabel(cardId, labelName) {
+  const proj = getProject();
+  const card = proj.cards.find(c => c.id === cardId);
+  if (!card) return;
+  if (!card.labels) card.labels = [];
+  const idx = card.labels.indexOf(labelName);
+  if (idx >= 0) card.labels.splice(idx, 1);
+  else card.labels.push(labelName);
+  persist();
+  modal.data = { ...card };
+  render();
+}
+
+function promptQuickAdd(colId) {
+  const title = prompt('Task title:');
+  if (title?.trim()) addCard(title.trim(), colId);
+}
+
+function promptNewProject() {
+  const name = prompt('Project name:');
+  if (name?.trim()) addProject(name.trim());
+}
+
+function promptAddColumn() {
+  const name = prompt('Column name:');
+  if (name?.trim()) addColumn(name.trim());
+}
+
+function promptAddLabel() {
+  const name = prompt('Label name:');
+  if (!name?.trim()) return;
+  const colors = Object.keys(LABEL_COLORS);
+  const color = prompt('Color (' + colors.join(', ') + '):', 'amber');
+  if (color && LABEL_COLORS[color]) {
+    const proj = getProject();
+    proj.labels.push({ name: name.trim(), color });
+    persist();
+  }
+}
+
+function removeLabelFromProject(name) {
+  const proj = getProject();
+  proj.labels = proj.labels.filter(l => l.name !== name);
+  proj.cards.forEach(c => { if (c.labels) c.labels = c.labels.filter(l => l !== name); });
+  persist();
+}
+
+function addMember(name) {
+  const proj = getProject();
+  if (!proj.members) proj.members = [];
+  if (proj.members.includes(name)) return;
+  proj.members.push(name);
+  persist();
+}
+
+function removeMember(name) {
+  const proj = getProject();
+  proj.members = (proj.members || []).filter(m => m !== name);
+  // Unassign from any cards
+  proj.cards.forEach(c => { if (c.assignee === name) c.assignee = ''; });
+  persist();
+}
+
+function confirmDeleteCard(cardId) {
+  if (confirm('Delete this card? This cannot be undone.')) {
+    deleteCard(cardId);
+    closeModal();
+  }
+}
+
+function confirmDeleteProject(id, name) {
+  if (confirm('Delete project "' + name + '"? All cards will be lost.')) {
+    deleteProject(id);
+  }
+}
+
+function confirmRemoveColumn(colId, name) {
+  if (confirm('Remove column "' + name + '"? Cards will be moved to backlog.')) {
+    removeColumn(colId);
+  }
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'diy-kanban-export.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.projects && data.activeProjectId) {
+        state = data;
+        persist();
+      } else {
+        alert('Invalid data format.');
+      }
+    } catch { alert('Failed to parse JSON file.'); }
+  };
+  reader.readAsText(file);
+}
+
+function attachDragListeners() {
+  // Touch drag support for mobile is complex; keeping native drag for desktop
+}
+
+// ─── Keyboard Shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modal) { closeModal(); e.preventDefault(); }
+  const inInput = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+  if (inInput || modal) return;
+  if (e.key === 'n') {
+    e.preventDefault();
+    promptQuickAdd(state.view === 'backlog' ? 'backlog' : (getProject()?.columns[0]?.id || 'backlog'));
+  }
+  if (e.key === 'b') {
+    e.preventDefault(); state.view = 'board'; persist();
+  }
+  if (e.key === 'l') {
+    e.preventDefault(); state.view = 'backlog'; persist();
+  }
+  if (e.key === 'd') {
+    e.preventDefault(); state.view = 'deps'; persist();
+  }
+});
+
+// ─── PWA Registration ──────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
+render();
+
+// Handle resize
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= 1024 && !sidebarOpen) { sidebarOpen = true; render(); }
+});
+</script>
+</body>
+</html>

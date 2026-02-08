@@ -1,0 +1,22 @@
+{
+  "name": "DIY Kanban — Project Planner",
+  "short_name": "DIY Kanban",
+  "description": "Scrum/Agile/Kanban planning tool for DIY projects",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#f59e0b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='24' fill='%2309090b'/><rect x='16' y='48' width='48' height='96' rx='8' fill='%23f59e0b'/><rect x='72' y='32' width='48' height='128' rx='8' fill='%23f59e0b' opacity='0.7'/><rect x='128' y='64' width='48' height='80' rx='8' fill='%23f59e0b' opacity='0.4'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='64' fill='%2309090b'/><rect x='40' y='128' width='128' height='256' rx='16' fill='%23f59e0b'/><rect x='192' y='80' width='128' height='352' rx='16' fill='%23f59e0b' opacity='0.7'/><rect x='344' y='160' width='128' height='208' rx='16' fill='%23f59e0b' opacity='0.4'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
