@@ -1861,7 +1861,7 @@ const NOTE_COLORS = [
 let retroState = {
   activeBoardId: null,
   canvas: { panX: 0, panY: 0, zoom: 1 },
-  timer: { running: false, seconds: 0, total: 300 },
+  timer: { running: false, done: false, seconds: 0, total: 300 },
   _timerInterval: null,
   showNewBoardDialog: false,
 };
@@ -2053,6 +2053,7 @@ function startRetroTimer(totalSec) {
   retroState.timer.total = totalSec || retroState.timer.total;
   retroState.timer.seconds = retroState.timer.total;
   retroState.timer.running = true;
+  retroState.timer.done = false;
   clearInterval(retroState._timerInterval);
   retroState._timerInterval = setInterval(() => {
     if (retroState.timer.seconds > 0) {
@@ -2061,6 +2062,7 @@ function startRetroTimer(totalSec) {
     } else {
       clearInterval(retroState._timerInterval);
       retroState.timer.running = false;
+      retroState.timer.done = true;
       renderRetroTimerDisplay();
       // Flash/alert
       const el = document.getElementById('retro-timer');
@@ -2073,6 +2075,7 @@ function startRetroTimer(totalSec) {
 function stopRetroTimer() {
   clearInterval(retroState._timerInterval);
   retroState.timer.running = false;
+  retroState.timer.done = false;
   retroState.timer.seconds = 0;
   renderRetroTimerDisplay();
 }
@@ -2084,7 +2087,7 @@ function renderRetroTimerDisplay() {
   const s = retroState.timer.seconds % 60;
   const display = `${m}:${s.toString().padStart(2, '0')}`;
   const isLow = retroState.timer.seconds > 0 && retroState.timer.seconds <= 30;
-  const isDone = retroState.timer.seconds === 0 && !retroState.timer.running;
+  const isDone = retroState.timer.done;
 
   if (retroState.timer.running) {
     el.innerHTML = `
