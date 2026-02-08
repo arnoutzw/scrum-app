@@ -1418,6 +1418,19 @@ function renderSettings(proj) {
             ${state.giphyApiKey ? `<button onclick="setGiphyApiKey('')" class="text-zinc-500 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-xs font-mono">Clear</button>` : ''}
           </div>
         </div>
+        <div class="mt-4 pt-4 border-t border-zinc-800">
+          <label class="text-xs text-zinc-500 font-mono block mb-1">Imgflip Account (for memes)</label>
+          <p class="text-xs text-zinc-600 mb-2">Free account at <a href="https://imgflip.com/signup" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline">imgflip.com</a></p>
+          <div class="flex gap-2">
+            <input type="text" value="${escHtml(state.imgflipUser || '')}" placeholder="Username"
+              onchange="state.imgflipUser=this.value.trim(); save(state);"
+              class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            <input type="password" value="${escHtml(state.imgflipPass || '')}" placeholder="Password"
+              onchange="state.imgflipPass=this.value.trim(); save(state);"
+              class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            ${state.imgflipUser ? `<button onclick="state.imgflipUser=''; state.imgflipPass=''; persist()" class="text-zinc-500 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-xs font-mono">Clear</button>` : ''}
+          </div>
+        </div>
       </div>
 
       <!-- Danger Zone -->
@@ -2298,6 +2311,10 @@ function renderRetroCanvas(board) {
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-purple-500 hover:text-purple-400 transition-colors">
             <i data-lucide="image" class="w-3 h-3"></i> GIF
           </button>
+          <button onclick="openMemeDialog()"
+            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors">
+            <i data-lucide="smile" class="w-3 h-3"></i> Meme
+          </button>
           <button onclick="openWordArtDialog()"
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-cyan-500 hover:text-cyan-400 transition-colors"
             style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: bold; letter-spacing: -0.5px;">
@@ -2354,6 +2371,7 @@ function renderRetroColumn(col, board) {
 function renderRetroNote(note) {
   if (note.type === 'gif') return renderRetroGifNote(note);
   if (note.type === 'wordart') return renderRetroWordArt(note);
+  if (note.type === 'meme') return renderRetroGifNote(note);
   const votes = note.votes || 0;
   return `
     <div class="retro-note" id="retro-note-wrap-${note.id}"
@@ -2587,6 +2605,231 @@ function renderRetroWordArt(note) {
         </button>
       </div>
       <div class="wordart-text ${wa.css}" style="${wa.style}">${escHtml(note.text)}</div>
+    </div>
+  `;
+}
+
+// ─── Imgflip Memes ────────────────────────────────────────────────────────────
+
+let memeTemplates = [];
+let memeLoading = false;
+let memeStep = 'pick'; // 'pick' | 'caption' | 'creds'
+let memeSelected = null; // { id, name, url, box_count }
+let memeGenerating = false;
+
+function getImgflipCreds() {
+  return { user: state.imgflipUser || '', pass: state.imgflipPass || '' };
+}
+
+function openMemeDialog() {
+  memeStep = 'pick';
+  memeSelected = null;
+  memeGenerating = false;
+  renderMemeModal();
+  if (memeTemplates.length === 0) loadMemeTemplates();
+}
+
+function closeMemeDialog() {
+  const el = document.getElementById('meme-modal');
+  if (el) el.remove();
+}
+
+function loadMemeTemplates() {
+  memeLoading = true;
+  renderMemeResults();
+  fetch('https://api.imgflip.com/get_memes')
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) memeTemplates = data.data.memes.slice(0, 60);
+      memeLoading = false;
+      renderMemeResults();
+    })
+    .catch(() => { memeLoading = false; renderMemeResults(); });
+}
+
+function selectMemeTemplate(idx) {
+  memeSelected = memeTemplates[idx];
+  const creds = getImgflipCreds();
+  memeStep = (creds.user && creds.pass) ? 'caption' : 'creds';
+  renderMemeModal();
+}
+
+function saveMemeCredsAndContinue() {
+  const u = document.getElementById('meme-user')?.value?.trim();
+  const p = document.getElementById('meme-pass')?.value?.trim();
+  if (!u || !p) return;
+  state.imgflipUser = u;
+  state.imgflipPass = p;
+  save(state);
+  memeStep = 'caption';
+  renderMemeModal();
+}
+
+function generateMeme() {
+  if (!memeSelected) return;
+  const creds = getImgflipCreds();
+  if (!creds.user || !creds.pass) { memeStep = 'creds'; renderMemeModal(); return; }
+
+  const boxCount = memeSelected.box_count || 2;
+  const boxes = [];
+  for (let i = 0; i < boxCount; i++) {
+    const inp = document.getElementById('meme-box-' + i);
+    boxes.push(inp?.value || '');
+  }
+
+  memeGenerating = true;
+  renderMemeModal();
+
+  const params = new URLSearchParams();
+  params.append('template_id', memeSelected.id);
+  params.append('username', creds.user);
+  params.append('password', creds.pass);
+  boxes.forEach((t, i) => {
+    params.append(`boxes[${i}][text]`, t);
+  });
+
+  fetch('https://api.imgflip.com/caption_image', { method: 'POST', body: params })
+    .then(r => r.json())
+    .then(data => {
+      memeGenerating = false;
+      if (data.success) {
+        addMemeToCanvas(data.data.url, memeSelected.name);
+        closeMemeDialog();
+      } else {
+        alert('Meme generation failed: ' + (data.error_message || 'Unknown error'));
+        renderMemeModal();
+      }
+    })
+    .catch(err => {
+      memeGenerating = false;
+      alert('Network error: ' + err.message);
+      renderMemeModal();
+    });
+}
+
+function addMemeToCanvas(imageUrl, title) {
+  const board = getActiveRetroBoard();
+  if (!board) return;
+  board.notes.push({
+    id: uid(),
+    type: 'meme',
+    columnId: null,
+    text: title,
+    gifUrl: imageUrl,
+    color: '#27272a',
+    textColor: '#a1a1aa',
+    x: -retroState.canvas.panX / retroState.canvas.zoom + 80 + Math.random() * 80,
+    y: -retroState.canvas.panY / retroState.canvas.zoom + 80 + Math.random() * 80,
+    votes: 0,
+    voters: [],
+    createdAt: Date.now()
+  });
+  persist();
+}
+
+function renderMemeModal() {
+  let el = document.getElementById('meme-modal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'meme-modal';
+    document.body.appendChild(el);
+  }
+
+  let body = '';
+  if (memeStep === 'creds') {
+    const creds = getImgflipCreds();
+    body = `
+      <div class="flex flex-col items-center py-2">
+        <i data-lucide="key" class="w-8 h-8 text-zinc-600 mb-3"></i>
+        <p class="text-sm text-zinc-300 font-mono mb-1">Imgflip Account Required</p>
+        <p class="text-xs text-zinc-500 mb-4 text-center">Create a free account at <a href="https://imgflip.com/signup" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline">imgflip.com</a> to generate memes.</p>
+        <div class="w-full space-y-2 mb-3">
+          <input type="text" id="meme-user" placeholder="Username" value="${escHtml(creds.user)}"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none">
+          <input type="password" id="meme-pass" placeholder="Password" value="${escHtml(creds.pass)}"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none">
+        </div>
+        <button onclick="saveMemeCredsAndContinue()"
+          class="px-4 py-2 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white transition-colors">Save &amp; Continue</button>
+      </div>`;
+  } else if (memeStep === 'caption') {
+    const boxCount = Math.min(memeSelected?.box_count || 2, 5);
+    const labels = ['Top text', 'Bottom text', 'Text 3', 'Text 4', 'Text 5'];
+    body = `
+      <div class="flex gap-4">
+        <div class="flex-shrink-0">
+          <img src="${escHtml(memeSelected.url)}" style="width:180px; border-radius:8px; border:1px solid #3f3f46;" alt="${escHtml(memeSelected.name)}">
+          <p class="text-xs text-zinc-400 font-mono mt-1 text-center">${escHtml(memeSelected.name)}</p>
+        </div>
+        <div class="flex-1 space-y-2">
+          ${Array.from({length: boxCount}, (_, i) => `
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">${labels[i] || 'Text ' + (i+1)}</label>
+              <input type="text" id="meme-box-${i}" placeholder="${labels[i] || ''}"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none">
+            </div>
+          `).join('')}
+          <button onclick="generateMeme()" ${memeGenerating ? 'disabled' : ''}
+            class="w-full mt-2 px-4 py-2 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            ${memeGenerating ? 'Generating...' : '<i data-lucide="wand-2" class="w-3 h-3"></i> Generate Meme'}
+          </button>
+        </div>
+      </div>`;
+  } else {
+    body = `
+      <div id="meme-results" class="max-h-96 overflow-y-auto">
+        ${renderMemeResultsInner()}
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 pt-12 fade-in"
+      onclick="if(event.target===this) closeMemeDialog();">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-${memeStep === 'caption' ? '2xl' : 'lg'} slide-in" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+          <div class="flex items-center gap-2">
+            ${memeStep !== 'pick' ? `<button onclick="memeStep='pick'; renderMemeModal()" class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>` : ''}
+            <i data-lucide="smile" class="w-5 h-5 text-emerald-400"></i>
+            <h3 class="font-mono font-bold text-zinc-100">${memeStep === 'pick' ? 'Pick a Meme' : memeStep === 'creds' ? 'Imgflip Login' : 'Caption Your Meme'}</h3>
+          </div>
+          <button onclick="closeMemeDialog()"
+            class="text-zinc-500 hover:text-zinc-300 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="p-4">
+          ${body}
+        </div>
+      </div>
+    </div>
+  `;
+  lucide.createIcons();
+}
+
+function renderMemeResults() {
+  const el = document.getElementById('meme-results');
+  if (el) el.innerHTML = renderMemeResultsInner();
+}
+
+function renderMemeResultsInner() {
+  if (memeLoading) {
+    return `<div class="flex items-center justify-center py-8"><span class="text-xs text-zinc-500 font-mono">Loading meme templates...</span></div>`;
+  }
+  if (memeTemplates.length === 0) {
+    return `<div class="flex items-center justify-center py-8"><span class="text-xs text-zinc-500 font-mono">Failed to load templates</span></div>`;
+  }
+  return `
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+      ${memeTemplates.map((m, i) => `
+        <button onclick="selectMemeTemplate(${i})"
+          class="rounded-lg overflow-hidden border border-zinc-700 hover:border-emerald-500 transition-all cursor-pointer group text-left"
+          title="${escHtml(m.name)}">
+          <img src="${escHtml(m.url)}" alt="${escHtml(m.name)}" style="width:100%; display:block; min-height:80px; background:#18181b;" loading="lazy">
+          <div class="px-2 py-1.5 bg-zinc-800">
+            <span class="text-xs font-mono text-zinc-300 group-hover:text-emerald-400 transition-colors line-clamp-1" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(m.name)}</span>
+          </div>
+        </button>
+      `).join('')}
     </div>
   `;
 }
