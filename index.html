@@ -2266,7 +2266,7 @@ function renderRetroEmoji(note) {
   const fontSize = Math.min(w, h) * 0.75;
   return `
     <div class="emoji-note" id="retro-note-wrap-${note.id}"
-      style="left:${note.x}px; top:${note.y}px; width:${w}px; height:${h}px; z-index:${10 + (note.votes||0)};"
+      style="left:${note.x}px; top:${note.y}px; width:${w}px; height:${h}px; z-index:${note.zIndex || 10};"
       data-note-id="${note.id}">
       <div class="emoji-display" style="font-size:${fontSize}px; width:${w}px; height:${h}px; display:flex; align-items:center; justify-content:center;">
         ${note.text}
@@ -2442,7 +2442,7 @@ function renderRetroShape(note) {
 
   return `
     <div class="shape-note" id="retro-note-wrap-${note.id}"
-      style="left:${note.x}px; top:${note.y}px; width:${w}px; height:${h}px; z-index:${10 + (note.votes||0)};"
+      style="left:${note.x}px; top:${note.y}px; width:${w}px; height:${h}px; z-index:${note.zIndex || 10};"
       data-note-id="${note.id}">
       <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="position:absolute;top:0;left:0;">
         ${shapeSvg}
@@ -2933,7 +2933,7 @@ function renderRetroNote(note) {
   const votes = note.votes || 0;
   return `
     <div class="retro-note" id="retro-note-wrap-${note.id}"
-      style="left:${note.x}px; top:${note.y}px; background:${note.color}; color:${note.textColor}; z-index:${10 + votes};"
+      style="left:${note.x}px; top:${note.y}px; background:${note.color}; color:${note.textColor}; z-index:${note.zIndex || 10};"
       data-note-id="${note.id}">
       <div class="retro-note-header">
         <div class="flex items-center gap-1" style="cursor:grab;" data-note-drag="${note.id}">
@@ -2984,7 +2984,7 @@ function renderRetroGifNote(note) {
   const votes = note.votes || 0;
   return `
     <div class="retro-note" id="retro-note-wrap-${note.id}"
-      style="left:${note.x}px; top:${note.y}px; background:#27272a; color:#a1a1aa; z-index:${10 + votes}; width:240px; min-height:auto; border:1px solid #3f3f46; padding:0; overflow:hidden;"
+      style="left:${note.x}px; top:${note.y}px; background:#27272a; color:#a1a1aa; z-index:${note.zIndex || 10}; width:240px; min-height:auto; border:1px solid #3f3f46; padding:0; overflow:hidden;"
       data-note-id="${note.id}">
       <div class="flex items-center justify-between px-2 py-1.5" style="background:#1c1c1e;">
         <div class="flex items-center gap-1" style="cursor:grab;" data-note-drag="${note.id}">
@@ -3153,7 +3153,7 @@ function renderRetroWordArt(note) {
   const votes = note.votes || 0;
   return `
     <div class="wordart-item" id="retro-note-wrap-${note.id}"
-      style="left:${note.x}px; top:${note.y}px; z-index:${10 + votes};"
+      style="left:${note.x}px; top:${note.y}px; z-index:${note.zIndex || 10};"
       data-note-id="${note.id}">
       <div class="flex items-center gap-1 mb-1">
         <div class="flex items-center gap-1 px-1 py-0.5 rounded bg-zinc-900/80" style="cursor:grab;" data-note-drag="${note.id}">
@@ -3790,9 +3790,12 @@ function attachRetroListeners() {
       const pos = getCanvasPos(e);
       const dx = (pos.x - dragStart.x) / retroState.canvas.zoom;
       const dy = (pos.y - dragStart.y) / retroState.canvas.zoom;
+      const board = getActiveRetroBoard();
+      const maxZ = board ? Math.max(10, ...board.notes.map(n => n.zIndex || 10)) : 10;
       updateRetroNote(dragNoteId, {
         x: dragNoteStart.x + dx,
-        y: dragNoteStart.y + dy
+        y: dragNoteStart.y + dy,
+        zIndex: maxZ + 1
       });
       const noteEl = document.getElementById('retro-note-wrap-' + dragNoteId);
       if (noteEl) noteEl.classList.remove('dragging-note');
@@ -3869,9 +3872,11 @@ function attachRetroListeners() {
       const note = board?.notes.find(n => n.id === dragNoteId);
       const noteEl = document.getElementById('retro-note-wrap-' + dragNoteId);
       if (note && noteEl) {
+        const maxZ = board ? Math.max(10, ...board.notes.map(n => n.zIndex || 10)) : 10;
         updateRetroNote(dragNoteId, {
           x: parseFloat(noteEl.style.left),
-          y: parseFloat(noteEl.style.top)
+          y: parseFloat(noteEl.style.top),
+          zIndex: maxZ + 1
         });
       }
       isDraggingNote = false;
