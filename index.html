@@ -65,6 +65,17 @@ tailwind.config = {
   .retro-timer-pulse { animation: timerPulse 1s ease-in-out infinite; }
   @keyframes timerPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
   .retro-grid { background-image: radial-gradient(circle, #27272a 1px, transparent 1px); background-size: 40px 40px; }
+
+  /* WordArt styles — classic '90s Office vibes */
+  .wordart-item { position: absolute; cursor: default; user-select: none; }
+  .wordart-text { font-family: 'Times New Roman', 'Georgia', serif; white-space: nowrap; line-height: 1; }
+  .wa-rainbow { background: linear-gradient(90deg, #ff0000, #ff8800, #ffff00, #00cc00, #0066ff, #8800ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; font-style: italic; }
+  .wa-arc { display: inline-block; transform: perspective(200px) rotateX(20deg); font-weight: 900; }
+  .wa-shadow { font-weight: 900; }
+  .wa-outline { -webkit-text-stroke: 2px; font-weight: 900; }
+  .wa-wave { display: inline-block; animation: waWave 3s ease-in-out infinite; font-weight: 900; font-style: italic; }
+  @keyframes waWave { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-6px) rotate(3deg); } }
+  .wa-stretch { display: inline-block; transform: scaleY(1.8) scaleX(0.7); transform-origin: bottom; font-weight: 900; }
 </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans text-sm min-h-screen">
@@ -1407,6 +1418,19 @@ function renderSettings(proj) {
             ${state.giphyApiKey ? `<button onclick="setGiphyApiKey('')" class="text-zinc-500 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-xs font-mono">Clear</button>` : ''}
           </div>
         </div>
+        <div class="mt-4 pt-4 border-t border-zinc-800">
+          <label class="text-xs text-zinc-500 font-mono block mb-1">Imgflip Account (for memes)</label>
+          <p class="text-xs text-zinc-600 mb-2">Free account at <a href="https://imgflip.com/signup" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline">imgflip.com</a></p>
+          <div class="flex gap-2">
+            <input type="text" value="${escHtml(state.imgflipUser || '')}" placeholder="Username"
+              onchange="state.imgflipUser=this.value.trim(); save(state);"
+              class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            <input type="password" value="${escHtml(state.imgflipPass || '')}" placeholder="Password"
+              onchange="state.imgflipPass=this.value.trim(); save(state);"
+              class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            ${state.imgflipUser ? `<button onclick="state.imgflipUser=''; state.imgflipPass=''; persist()" class="text-zinc-500 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-xs font-mono">Clear</button>` : ''}
+          </div>
+        </div>
       </div>
 
       <!-- Danger Zone -->
@@ -2278,7 +2302,7 @@ function renderRetroCanvas(board) {
           <button onclick="retroState.canvas.zoom=1; retroState.canvas.panX=0; retroState.canvas.panY=0; render()"
             class="text-xs font-mono text-zinc-400 hover:text-zinc-200 px-2 py-1 rounded bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors" title="Reset view">Fit</button>
           <div class="w-px h-6 bg-zinc-700"></div>
-          <!-- Add note / column / GIF -->
+          <!-- Add note / column / GIF / WordArt -->
           <button onclick="addFreeRetroNote()"
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-900 font-bold transition-colors">
             <i data-lucide="plus" class="w-3 h-3"></i> Note
@@ -2286,6 +2310,15 @@ function renderRetroCanvas(board) {
           <button onclick="openGiphySearch()"
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-purple-500 hover:text-purple-400 transition-colors">
             <i data-lucide="image" class="w-3 h-3"></i> GIF
+          </button>
+          <button onclick="openMemeDialog()"
+            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors">
+            <i data-lucide="smile" class="w-3 h-3"></i> Meme
+          </button>
+          <button onclick="openWordArtDialog()"
+            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-cyan-500 hover:text-cyan-400 transition-colors"
+            style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: bold; letter-spacing: -0.5px;">
+            <span style="background:linear-gradient(to right,#ff0,#f0f,#0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:13px;">W</span> WordArt
           </button>
           <button onclick="addRetroColumn(getActiveRetroBoard())"
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
@@ -2337,6 +2370,8 @@ function renderRetroColumn(col, board) {
 
 function renderRetroNote(note) {
   if (note.type === 'gif') return renderRetroGifNote(note);
+  if (note.type === 'wordart') return renderRetroWordArt(note);
+  if (note.type === 'meme') return renderRetroGifNote(note);
   const votes = note.votes || 0;
   return `
     <div class="retro-note" id="retro-note-wrap-${note.id}"
@@ -2415,6 +2450,386 @@ function renderRetroGifNote(note) {
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"/></svg>
         </button>
       </div>
+    </div>
+  `;
+}
+
+// ─── WordArt ──────────────────────────────────────────────────────────────────
+
+const WORDART_STYLES = [
+  {
+    id: 'rainbow-arc',
+    name: 'Rainbow Arc',
+    css: 'wa-rainbow wa-arc',
+    style: 'font-size:48px; letter-spacing:2px;',
+    preview: 'background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;font-style:italic;font-size:22px;transform:perspective(200px) rotateX(20deg);display:inline-block;font-family:Times New Roman,serif;'
+  },
+  {
+    id: 'blue-outline',
+    name: 'Blue Outline',
+    css: 'wa-outline',
+    style: 'font-size:52px; color:#1e40af; -webkit-text-stroke:2.5px #60a5fa; letter-spacing:3px;',
+    preview: 'color:#1e40af;-webkit-text-stroke:1.5px #60a5fa;font-weight:900;font-size:22px;font-family:Times New Roman,serif;letter-spacing:2px;'
+  },
+  {
+    id: 'gold-shadow',
+    name: 'Gold Shadow',
+    css: 'wa-shadow',
+    style: 'font-size:52px; color:#fbbf24; text-shadow:3px 3px 0 #92400e, 6px 6px 0 #451a03; letter-spacing:2px; font-style:italic;',
+    preview: 'color:#fbbf24;text-shadow:2px 2px 0 #92400e,3px 3px 0 #451a03;font-weight:900;font-style:italic;font-size:22px;font-family:Times New Roman,serif;'
+  },
+  {
+    id: 'red-wave',
+    name: 'Red Wave',
+    css: 'wa-wave',
+    style: 'font-size:48px; color:#ef4444; text-shadow:2px 2px 0 #7f1d1d; font-style:italic;',
+    preview: 'color:#ef4444;text-shadow:1px 1px 0 #7f1d1d;font-weight:900;font-style:italic;font-size:22px;font-family:Times New Roman,serif;animation:waWave 3s ease-in-out infinite;display:inline-block;'
+  },
+  {
+    id: 'green-stretch',
+    name: 'Green Stretch',
+    css: 'wa-stretch',
+    style: 'font-size:44px; color:#22c55e; text-shadow:2px 4px 0 #14532d; letter-spacing:4px;',
+    preview: 'color:#22c55e;text-shadow:1px 2px 0 #14532d;font-weight:900;font-size:22px;font-family:Times New Roman,serif;transform:scaleY(1.5) scaleX(0.8);display:inline-block;letter-spacing:2px;'
+  },
+  {
+    id: 'purple-3d',
+    name: 'Purple 3D',
+    css: 'wa-shadow',
+    style: 'font-size:52px; color:#c084fc; text-shadow:2px 2px 0 #9333ea, 4px 4px 0 #7e22ce, 6px 6px 0 #581c87, 8px 8px 0 #3b0764; font-style:italic; letter-spacing:1px;',
+    preview: 'color:#c084fc;text-shadow:1px 1px 0 #9333ea,2px 2px 0 #7e22ce,3px 3px 0 #581c87;font-weight:900;font-style:italic;font-size:22px;font-family:Times New Roman,serif;'
+  }
+];
+
+function openWordArtDialog() {
+  let el = document.getElementById('wordart-modal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'wordart-modal';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 pt-16 fade-in"
+      onclick="if(event.target===this) closeWordArtDialog();">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-lg slide-in" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+          <div class="flex items-center gap-2">
+            <span style="background:linear-gradient(90deg,#ff0,#f0f,#0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;font-style:italic;font-family:Times New Roman,serif;font-size:18px;">W</span>
+            <h3 class="font-mono font-bold text-zinc-100">Insert WordArt</h3>
+          </div>
+          <button onclick="closeWordArtDialog()"
+            class="text-zinc-500 hover:text-zinc-300 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="p-4">
+          <label class="text-xs text-zinc-500 font-mono block mb-2">Your Text</label>
+          <input type="text" id="wordart-text" placeholder="Your Text Here" value="Your Text Here"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-cyan-500 focus:outline-none mb-4"
+            oninput="updateWordArtPreviews(this.value)">
+          <label class="text-xs text-zinc-500 font-mono block mb-2">Select a WordArt style</label>
+          <div class="grid grid-cols-2 gap-3" id="wordart-styles">
+            ${WORDART_STYLES.map(s => `
+              <button onclick="insertWordArt('${s.id}')"
+                class="bg-zinc-800 border border-zinc-700 rounded-lg p-4 h-20 flex items-center justify-center hover:border-cyan-500 hover:shadow-lg hover:shadow-cyan-500/10 transition-all overflow-hidden">
+                <span class="wordart-preview" style="${s.preview}" data-wa-style="${s.id}">Your Text Here</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  lucide.createIcons();
+  requestAnimationFrame(() => {
+    const inp = document.getElementById('wordart-text');
+    if (inp) { inp.focus(); inp.select(); }
+  });
+}
+
+function closeWordArtDialog() {
+  const el = document.getElementById('wordart-modal');
+  if (el) el.remove();
+}
+
+function updateWordArtPreviews(text) {
+  const display = text || 'Your Text Here';
+  document.querySelectorAll('.wordart-preview').forEach(el => {
+    el.textContent = display;
+  });
+}
+
+function insertWordArt(styleId) {
+  const board = getActiveRetroBoard();
+  if (!board) return;
+  const text = (document.getElementById('wordart-text')?.value || 'Your Text Here').trim() || 'Your Text Here';
+  const wa = WORDART_STYLES.find(s => s.id === styleId) || WORDART_STYLES[0];
+
+  const note = {
+    id: uid(),
+    type: 'wordart',
+    columnId: null,
+    text: text,
+    wordartStyle: wa.id,
+    x: -retroState.canvas.panX / retroState.canvas.zoom + 80 + Math.random() * 60,
+    y: -retroState.canvas.panY / retroState.canvas.zoom + 80 + Math.random() * 60,
+    votes: 0,
+    voters: [],
+    createdAt: Date.now()
+  };
+  board.notes.push(note);
+  closeWordArtDialog();
+  persist();
+}
+
+function renderRetroWordArt(note) {
+  const wa = WORDART_STYLES.find(s => s.id === note.wordartStyle) || WORDART_STYLES[0];
+  const votes = note.votes || 0;
+  return `
+    <div class="wordart-item" id="retro-note-wrap-${note.id}"
+      style="left:${note.x}px; top:${note.y}px; z-index:${10 + votes};"
+      data-note-id="${note.id}">
+      <div class="flex items-center gap-1 mb-1">
+        <div class="flex items-center gap-1 px-1 py-0.5 rounded bg-zinc-900/80" style="cursor:grab;" data-note-drag="${note.id}">
+          <svg width="10" height="10" viewBox="0 0 10 10" style="opacity:0.5;color:#a1a1aa"><circle cx="2" cy="2" r="1.2" fill="currentColor"/><circle cx="7" cy="2" r="1.2" fill="currentColor"/><circle cx="2" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/></svg>
+        </div>
+        <button onclick="event.stopPropagation(); voteRetroNote('${note.id}')"
+          class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold bg-zinc-900/80 transition-all hover:scale-110"
+          style="color:#f59e0b;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+          ${votes}
+        </button>
+        <button onclick="event.stopPropagation(); deleteRetroNote('${note.id}')"
+          class="px-1 py-0.5 rounded bg-zinc-900/80 hover:opacity-80 transition-opacity" style="color:#a1a1aa; opacity:0.5;">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2L8 8M8 2L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="wordart-text ${wa.css}" style="${wa.style}">${escHtml(note.text)}</div>
+    </div>
+  `;
+}
+
+// ─── Imgflip Memes ────────────────────────────────────────────────────────────
+
+let memeTemplates = [];
+let memeLoading = false;
+let memeStep = 'pick'; // 'pick' | 'caption' | 'creds'
+let memeSelected = null; // { id, name, url, box_count }
+let memeGenerating = false;
+
+function getImgflipCreds() {
+  return { user: state.imgflipUser || '', pass: state.imgflipPass || '' };
+}
+
+function openMemeDialog() {
+  memeStep = 'pick';
+  memeSelected = null;
+  memeGenerating = false;
+  renderMemeModal();
+  if (memeTemplates.length === 0) loadMemeTemplates();
+}
+
+function closeMemeDialog() {
+  const el = document.getElementById('meme-modal');
+  if (el) el.remove();
+}
+
+function loadMemeTemplates() {
+  memeLoading = true;
+  renderMemeResults();
+  fetch('https://api.imgflip.com/get_memes')
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) memeTemplates = data.data.memes.slice(0, 60);
+      memeLoading = false;
+      renderMemeResults();
+    })
+    .catch(() => { memeLoading = false; renderMemeResults(); });
+}
+
+function selectMemeTemplate(idx) {
+  memeSelected = memeTemplates[idx];
+  const creds = getImgflipCreds();
+  memeStep = (creds.user && creds.pass) ? 'caption' : 'creds';
+  renderMemeModal();
+}
+
+function saveMemeCredsAndContinue() {
+  const u = document.getElementById('meme-user')?.value?.trim();
+  const p = document.getElementById('meme-pass')?.value?.trim();
+  if (!u || !p) return;
+  state.imgflipUser = u;
+  state.imgflipPass = p;
+  save(state);
+  memeStep = 'caption';
+  renderMemeModal();
+}
+
+function generateMeme() {
+  if (!memeSelected) return;
+  const creds = getImgflipCreds();
+  if (!creds.user || !creds.pass) { memeStep = 'creds'; renderMemeModal(); return; }
+
+  const boxCount = memeSelected.box_count || 2;
+  const boxes = [];
+  for (let i = 0; i < boxCount; i++) {
+    const inp = document.getElementById('meme-box-' + i);
+    boxes.push(inp?.value || '');
+  }
+
+  memeGenerating = true;
+  renderMemeModal();
+
+  const params = new URLSearchParams();
+  params.append('template_id', memeSelected.id);
+  params.append('username', creds.user);
+  params.append('password', creds.pass);
+  boxes.forEach((t, i) => {
+    params.append(`boxes[${i}][text]`, t);
+  });
+
+  fetch('https://api.imgflip.com/caption_image', { method: 'POST', body: params })
+    .then(r => r.json())
+    .then(data => {
+      memeGenerating = false;
+      if (data.success) {
+        addMemeToCanvas(data.data.url, memeSelected.name);
+        closeMemeDialog();
+      } else {
+        alert('Meme generation failed: ' + (data.error_message || 'Unknown error'));
+        renderMemeModal();
+      }
+    })
+    .catch(err => {
+      memeGenerating = false;
+      alert('Network error: ' + err.message);
+      renderMemeModal();
+    });
+}
+
+function addMemeToCanvas(imageUrl, title) {
+  const board = getActiveRetroBoard();
+  if (!board) return;
+  board.notes.push({
+    id: uid(),
+    type: 'meme',
+    columnId: null,
+    text: title,
+    gifUrl: imageUrl,
+    color: '#27272a',
+    textColor: '#a1a1aa',
+    x: -retroState.canvas.panX / retroState.canvas.zoom + 80 + Math.random() * 80,
+    y: -retroState.canvas.panY / retroState.canvas.zoom + 80 + Math.random() * 80,
+    votes: 0,
+    voters: [],
+    createdAt: Date.now()
+  });
+  persist();
+}
+
+function renderMemeModal() {
+  let el = document.getElementById('meme-modal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'meme-modal';
+    document.body.appendChild(el);
+  }
+
+  let body = '';
+  if (memeStep === 'creds') {
+    const creds = getImgflipCreds();
+    body = `
+      <div class="flex flex-col items-center py-2">
+        <i data-lucide="key" class="w-8 h-8 text-zinc-600 mb-3"></i>
+        <p class="text-sm text-zinc-300 font-mono mb-1">Imgflip Account Required</p>
+        <p class="text-xs text-zinc-500 mb-4 text-center">Create a free account at <a href="https://imgflip.com/signup" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline">imgflip.com</a> to generate memes.</p>
+        <div class="w-full space-y-2 mb-3">
+          <input type="text" id="meme-user" placeholder="Username" value="${escHtml(creds.user)}"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none">
+          <input type="password" id="meme-pass" placeholder="Password" value="${escHtml(creds.pass)}"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none">
+        </div>
+        <button onclick="saveMemeCredsAndContinue()"
+          class="px-4 py-2 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white transition-colors">Save &amp; Continue</button>
+      </div>`;
+  } else if (memeStep === 'caption') {
+    const boxCount = Math.min(memeSelected?.box_count || 2, 5);
+    const labels = ['Top text', 'Bottom text', 'Text 3', 'Text 4', 'Text 5'];
+    body = `
+      <div class="flex gap-4">
+        <div class="flex-shrink-0">
+          <img src="${escHtml(memeSelected.url)}" style="width:180px; border-radius:8px; border:1px solid #3f3f46;" alt="${escHtml(memeSelected.name)}">
+          <p class="text-xs text-zinc-400 font-mono mt-1 text-center">${escHtml(memeSelected.name)}</p>
+        </div>
+        <div class="flex-1 space-y-2">
+          ${Array.from({length: boxCount}, (_, i) => `
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">${labels[i] || 'Text ' + (i+1)}</label>
+              <input type="text" id="meme-box-${i}" placeholder="${labels[i] || ''}"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none">
+            </div>
+          `).join('')}
+          <button onclick="generateMeme()" ${memeGenerating ? 'disabled' : ''}
+            class="w-full mt-2 px-4 py-2 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            ${memeGenerating ? 'Generating...' : '<i data-lucide="wand-2" class="w-3 h-3"></i> Generate Meme'}
+          </button>
+        </div>
+      </div>`;
+  } else {
+    body = `
+      <div id="meme-results" class="max-h-96 overflow-y-auto">
+        ${renderMemeResultsInner()}
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 pt-12 fade-in"
+      onclick="if(event.target===this) closeMemeDialog();">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-${memeStep === 'caption' ? '2xl' : 'lg'} slide-in" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+          <div class="flex items-center gap-2">
+            ${memeStep !== 'pick' ? `<button onclick="memeStep='pick'; renderMemeModal()" class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>` : ''}
+            <i data-lucide="smile" class="w-5 h-5 text-emerald-400"></i>
+            <h3 class="font-mono font-bold text-zinc-100">${memeStep === 'pick' ? 'Pick a Meme' : memeStep === 'creds' ? 'Imgflip Login' : 'Caption Your Meme'}</h3>
+          </div>
+          <button onclick="closeMemeDialog()"
+            class="text-zinc-500 hover:text-zinc-300 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="p-4">
+          ${body}
+        </div>
+      </div>
+    </div>
+  `;
+  lucide.createIcons();
+}
+
+function renderMemeResults() {
+  const el = document.getElementById('meme-results');
+  if (el) el.innerHTML = renderMemeResultsInner();
+}
+
+function renderMemeResultsInner() {
+  if (memeLoading) {
+    return `<div class="flex items-center justify-center py-8"><span class="text-xs text-zinc-500 font-mono">Loading meme templates...</span></div>`;
+  }
+  if (memeTemplates.length === 0) {
+    return `<div class="flex items-center justify-center py-8"><span class="text-xs text-zinc-500 font-mono">Failed to load templates</span></div>`;
+  }
+  return `
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+      ${memeTemplates.map((m, i) => `
+        <button onclick="selectMemeTemplate(${i})"
+          class="rounded-lg overflow-hidden border border-zinc-700 hover:border-emerald-500 transition-all cursor-pointer group text-left"
+          title="${escHtml(m.name)}">
+          <img src="${escHtml(m.url)}" alt="${escHtml(m.name)}" style="width:100%; display:block; min-height:80px; background:#18181b;" loading="lazy">
+          <div class="px-2 py-1.5 bg-zinc-800">
+            <span class="text-xs font-mono text-zinc-300 group-hover:text-emerald-400 transition-colors line-clamp-1" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(m.name)}</span>
+          </div>
+        </button>
+      `).join('')}
     </div>
   `;
 }
