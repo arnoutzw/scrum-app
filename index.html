@@ -2146,6 +2146,26 @@ function hasVoted(note) {
   return (note.voters || []).includes(retroState.nickname);
 }
 
+function toggleRetroDownvote(noteId) {
+  const board = getActiveRetroBoard();
+  if (!board || !retroState.nickname) return;
+  const note = board.notes.find(n => n.id === noteId);
+  if (!note) return;
+  if (!note.downvoters) note.downvoters = [];
+  const idx = note.downvoters.indexOf(retroState.nickname);
+  if (idx >= 0) {
+    note.downvoters.splice(idx, 1);
+  } else {
+    note.downvoters.push(retroState.nickname);
+  }
+  note.downvotes = note.downvoters.length;
+  persist();
+}
+
+function hasDownvoted(note) {
+  return (note.downvoters || []).includes(retroState.nickname);
+}
+
 function changeNoteColor(noteId, colorIdx) {
   const c = NOTE_COLORS[colorIdx];
   if (c) updateRetroNote(noteId, { color: c.bg, textColor: c.text });
@@ -2376,6 +2396,7 @@ function renderRetroCanvas(board) {
 
   const { panX, panY, zoom } = retroState.canvas;
   const totalVotes = board.notes.reduce((sum, n) => sum + (n.votes || 0), 0);
+  const totalDownvotes = board.notes.reduce((sum, n) => sum + (n.downvotes || 0), 0);
 
   return `
     <div class="flex flex-col h-full" style="min-height: calc(100vh - 90px)">
@@ -2388,7 +2409,7 @@ function renderRetroCanvas(board) {
           </button>
           <span class="font-mono font-bold text-sm text-zinc-100">${escHtml(board.name)}</span>
           <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">${board.notes.length} notes</span>
-          <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">${totalVotes} votes</span>
+          <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono"><span style="color:#ef4444;">&#9829;</span> ${totalVotes} <span style="color:#3b82f6;">&#128078;</span> ${totalDownvotes}</span>
           <div class="flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700" id="retro-presence-bar">
           </div>
         </div>
@@ -2518,12 +2539,20 @@ function renderRetroNote(note) {
         onblur="updateRetroNote('${note.id}', {text: this.value})"
         placeholder="Type here...">${escHtml(note.text)}</textarea>
       <div class="flex items-center justify-between mt-auto pt-2" style="border-top: 1px solid ${note.textColor}20;">
-        <button onclick="event.stopPropagation(); toggleRetroVote('${note.id}')"
-          class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold transition-all hover:scale-110"
-          style="color:${hasVoted(note) ? '#ef4444' : note.textColor};">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="${hasVoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          ${votes}
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="event.stopPropagation(); toggleRetroVote('${note.id}')"
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold transition-all hover:scale-110"
+            style="color:${hasVoted(note) ? '#ef4444' : note.textColor};">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="${hasVoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            ${votes}
+          </button>
+          <button onclick="event.stopPropagation(); toggleRetroDownvote('${note.id}')"
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold transition-all hover:scale-110"
+            style="color:${hasDownvoted(note) ? '#3b82f6' : note.textColor};">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="${hasDownvoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+            ${note.downvotes || 0}
+          </button>
+        </div>
         ${note.author ? `<span class="text-xs font-mono" style="opacity:0.5;">${escHtml(note.author)}</span>` : ''}
       </div>
     </div>
@@ -2548,12 +2577,20 @@ function renderRetroGifNote(note) {
       <img src="${escHtml(note.gifUrl)}" alt="${escHtml(note.text)}" style="width:100%; display:block;" loading="lazy">
       ${note.text ? `<div class="px-2 py-1.5 text-xs font-mono" style="color:#a1a1aa;">${escHtml(note.text)}</div>` : ''}
       <div class="flex items-center justify-between px-2 py-1.5" style="border-top:1px solid #3f3f4640;">
-        <button onclick="event.stopPropagation(); toggleRetroVote('${note.id}')"
-          class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold transition-all hover:scale-110"
-          style="color:${hasVoted(note) ? '#ef4444' : '#a1a1aa'};">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="${hasVoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          ${votes}
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="event.stopPropagation(); toggleRetroVote('${note.id}')"
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold transition-all hover:scale-110"
+            style="color:${hasVoted(note) ? '#ef4444' : '#a1a1aa'};">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="${hasVoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            ${votes}
+          </button>
+          <button onclick="event.stopPropagation(); toggleRetroDownvote('${note.id}')"
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold transition-all hover:scale-110"
+            style="color:${hasDownvoted(note) ? '#3b82f6' : '#a1a1aa'};">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="${hasDownvoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+            ${note.downvotes || 0}
+          </button>
+        </div>
         ${note.author ? `<span class="text-xs font-mono" style="color:#71717a;">${escHtml(note.author)}</span>` : ''}
       </div>
     </div>
@@ -2705,6 +2742,12 @@ function renderRetroWordArt(note) {
           style="color:${hasVoted(note) ? '#ef4444' : '#a1a1aa'};">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="${hasVoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
           ${votes}
+        </button>
+        <button onclick="event.stopPropagation(); toggleRetroDownvote('${note.id}')"
+          class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-bold bg-zinc-900/80 transition-all hover:scale-110"
+          style="color:${hasDownvoted(note) ? '#3b82f6' : '#a1a1aa'};">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="${hasDownvoted(note) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+          ${note.downvotes || 0}
         </button>
         <button onclick="event.stopPropagation(); deleteRetroNote('${note.id}')"
           class="px-1 py-0.5 rounded bg-zinc-900/80 hover:opacity-80 transition-opacity" style="color:#a1a1aa; opacity:0.5;">
