@@ -11,6 +11,8 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
 <script>
 tailwind.config = {
   theme: {
@@ -58,6 +60,28 @@ tailwind.config = {
 <script>
 // ─── Data Layer ────────────────────────────────────────────────────────────────
 const DB_KEY = 'diy-kanban-data';
+
+// ─── Firebase ─────────────────────────────────────────────────────────────────
+firebase.initializeApp({
+  apiKey: "AIzaSyAqRWVgti-CuXzr5AkhDKmPlu7iA2MQpUg",
+  authDomain: "arnout-s-homelab.firebaseapp.com",
+  projectId: "arnout-s-homelab",
+  storageBucket: "arnout-s-homelab.firebasestorage.app",
+  messagingSenderId: "258011834485",
+  appId: "1:258011834485:web:5afb1efaa303b4dd93f03c",
+  measurementId: "G-VXDKDLXP7L"
+});
+const db = firebase.firestore();
+const FIRESTORE_DOC = db.collection('kanban-boards').doc('shared');
+
+let _fsWriteTimer = null;
+function saveToFirestore(data) {
+  clearTimeout(_fsWriteTimer);
+  _fsWriteTimer = setTimeout(() => {
+    FIRESTORE_DOC.set(JSON.parse(JSON.stringify(data)))
+      .catch(err => console.warn('Firestore write failed:', err));
+  }, 500);
+}
 
 const DEFAULT_COLUMNS = [
   { id: uid(), name: 'To Do', wipLimit: 0 },
@@ -129,6 +153,7 @@ function load() {
 
 function save(data) {
   localStorage.setItem(DB_KEY, JSON.stringify(data));
+  saveToFirestore(data);
 }
 
 function createProject(name) {
@@ -678,11 +703,17 @@ function render() {
             ${proj.labels.map(l => `<option value="${l.name}" ${filterLabel === l.name ? 'selected' : ''}>${l.name}</option>`).join('')}
           </select>
           ${proj.members.length > 0 ? `
-          <select onchange="filterAssignee=this.value; render()"
-            class="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs font-mono text-zinc-300 focus:border-amber-500 focus:outline-none">
-            <option value="" ${!filterAssignee ? 'selected' : ''}>All people</option>
-            ${proj.members.map(m => `<option value="${escHtml(m)}" ${filterAssignee === m ? 'selected' : ''}>${escHtml(m)}</option>`).join('')}
-          </select>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <span class="text-xs text-zinc-500 font-mono mr-1">People:</span>
+            ${proj.members.map(m => `
+              <button onclick="filterAssignee = filterAssignee === '${escHtml(m)}' ? '' : '${escHtml(m)}'; render()"
+                title="${escHtml(m)}"
+                class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono transition-colors flex-shrink-0 ${filterAssignee === m ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300' : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300'}">
+                <div class="${getAvatarClasses(m, 'xs')}">${getInitials(m)}</div>
+                <span class="hidden sm:inline">${escHtml(m)}</span>
+              </button>
+            `).join('')}
+          </div>
           ` : ''}
           ${(filterPriority || filterLabel || filterAssignee || searchQuery) ? `
             <button onclick="filterPriority=''; filterLabel=''; filterAssignee=''; searchQuery=''; render()"
@@ -1774,6 +1805,34 @@ document.addEventListener('keydown', (e) => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+
+// ─── Firestore Real-time Sync ─────────────────────────────────────────────────
+function migrateData(data) {
+  (data.projects || []).forEach(p => {
+    if (!p.members) p.members = [];
+    (p.cards || []).forEach(c => {
+      if (!c.dependencies) c.dependencies = [];
+      if (!c.assignee) c.assignee = '';
+    });
+  });
+  return data;
+}
+
+FIRESTORE_DOC.onSnapshot(doc => {
+  if (doc.exists && !doc.metadata.hasPendingWrites) {
+    const data = migrateData(doc.data());
+    state = data;
+    localStorage.setItem(DB_KEY, JSON.stringify(data));
+    render();
+  }
+}, err => console.warn('Firestore listener error:', err));
+
+// Push initial state to Firestore if no remote data exists yet
+FIRESTORE_DOC.get().then(doc => {
+  if (!doc.exists) {
+    saveToFirestore(state);
+  }
+}).catch(() => {});
 
 // ─── Init ──────────────────────────────────────────────────────────────────────
 render();
