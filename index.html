@@ -777,9 +777,11 @@ function render() {
   if (state.view === 'deps') {
     requestAnimationFrame(() => drawDepEdges());
   }
-  // Attach retro canvas listeners
-  if (state.view === 'retro') {
+  // Attach retro canvas listeners + presence
+  if (state.view === 'retro' && retroState.activeBoardId && retroState.nickname) {
     requestAnimationFrame(() => attachRetroListeners());
+  } else {
+    stopPresence();
   }
 }
 
@@ -1939,6 +1941,65 @@ function saveRetroNickname(name) {
   }
 }
 
+// ─── Presence Tracking ────────────────────────────────────────────────────────
+let retroPresenceUnsub = null;
+let retroPresenceInterval = null;
+let retroActiveUsers = [];
+
+function getPresenceDocId() {
+  return retroState.ipKey || ('anon_' + uid());
+}
+
+function startPresence(boardId) {
+  stopPresence();
+  if (!retroState.nickname || !boardId) return;
+  const docId = getPresenceDocId();
+  const ref = db.collection('retro-presence').doc(docId);
+  const write = () => ref.set({
+    nickname: retroState.nickname,
+    boardId: boardId,
+    lastSeen: Date.now()
+  }).catch(() => {});
+  write();
+  retroPresenceInterval = setInterval(write, 20000);
+  // Listen for all active users on this board
+  retroPresenceUnsub = db.collection('retro-presence')
+    .where('boardId', '==', boardId)
+    .onSnapshot(snap => {
+      const now = Date.now();
+      retroActiveUsers = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d.nickname && (now - d.lastSeen) < 60000) {
+          retroActiveUsers.push(d.nickname);
+        }
+      });
+      renderPresenceBar();
+    }, () => {});
+  // Clean up on page unload
+  window.addEventListener('beforeunload', stopPresence);
+}
+
+function stopPresence() {
+  if (retroPresenceInterval) { clearInterval(retroPresenceInterval); retroPresenceInterval = null; }
+  if (retroPresenceUnsub) { retroPresenceUnsub(); retroPresenceUnsub = null; }
+  // Remove own presence doc
+  const docId = getPresenceDocId();
+  if (docId && retroState.nickname) {
+    db.collection('retro-presence').doc(docId).delete().catch(() => {});
+  }
+  retroActiveUsers = [];
+}
+
+function renderPresenceBar() {
+  const el = document.getElementById('retro-presence-bar');
+  if (!el) return;
+  const unique = [...new Set(retroActiveUsers)];
+  el.innerHTML = unique.map((name, i) => `
+    <div class="${getAvatarClasses(name, 'xs')}" title="${escHtml(name)}" style="margin-left:${i > 0 ? '-4px' : '0'};border:2px solid #09090b;">${getInitials(name)}</div>
+  `).join('') + (unique.length > 0 ? `<span class="text-xs font-mono text-zinc-500 ml-1">${unique.length} online</span>` : '');
+}
+
 function getRetro() {
   const proj = getProject();
   if (!proj.retro) proj.retro = { boards: [] };
@@ -2328,9 +2389,7 @@ function renderRetroCanvas(board) {
           <span class="font-mono font-bold text-sm text-zinc-100">${escHtml(board.name)}</span>
           <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">${board.notes.length} notes</span>
           <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">${totalVotes} votes</span>
-          <div class="flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700">
-            <div class="${getAvatarClasses(retroState.nickname, 'xs')}">${getInitials(retroState.nickname)}</div>
-            <span class="text-xs font-mono text-zinc-400">${escHtml(retroState.nickname)}</span>
+          <div class="flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700" id="retro-presence-bar">
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -3074,6 +3133,11 @@ function renderGiphyResultsInner() {
 function attachRetroListeners() {
   const canvas = document.getElementById('retro-canvas');
   if (!canvas) return;
+
+  // Start presence tracking for this board
+  if (retroState.activeBoardId && retroState.nickname) {
+    startPresence(retroState.activeBoardId);
+  }
 
   let isPanning = false;
   let panStart = { x: 0, y: 0 };
