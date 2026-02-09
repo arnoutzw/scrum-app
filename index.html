@@ -96,6 +96,13 @@ tailwind.config = {
   .wa-wave { display: inline-block; animation: waWave 3s ease-in-out infinite; font-weight: 900; font-style: italic; }
   @keyframes waWave { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-6px) rotate(3deg); } }
   .wa-stretch { display: inline-block; transform: scaleY(1.8) scaleX(0.7); transform-origin: bottom; font-weight: 900; }
+
+  /* Spinner game */
+  .spinner-wheel { position: relative; width: 340px; height: 340px; border-radius: 50%; border: 4px solid #f59e0b; transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99); }
+  .spinner-segment { position: absolute; width: 100%; height: 100%; clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%); transform-origin: 50% 50%; display: flex; align-items: center; justify-content: center; }
+  .spinner-pointer { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 22px solid #f59e0b; z-index: 10; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+  .spinner-answer-card { animation: cardEnter 0.3s ease-out; }
+  .spinner-submitted { animation: fadeIn 0.3s ease-out; }
 </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans text-sm min-h-screen">
@@ -1912,6 +1919,292 @@ const RETRO_TEMPLATES = {
   }
 };
 
+// ─── Spinner Game ──────────────────────────────────────────────────────────────
+const SPINNER_PROMPTS = [
+  { question: 'What should we start doing that we are not doing today?', category: 'Start' },
+  { question: 'What should we stop doing because it is not adding value?', category: 'Stop' },
+  { question: 'What is working well and we should continue doing?', category: 'Continue' },
+  { question: 'What went well in this sprint?', category: 'Went Well' },
+  { question: 'What could we improve for next sprint?', category: 'To Improve' },
+  { question: 'What concrete action can we take to improve?', category: 'Action Item' },
+  { question: 'What frustrated or angered you during this sprint?', category: 'Mad' },
+  { question: 'What made you feel disappointed or sad?', category: 'Sad' },
+  { question: 'What made you happy or glad during this sprint?', category: 'Glad' },
+  { question: 'What did you learn in this sprint?', category: 'Learned' },
+  { question: 'What did you feel was lacking or missing?', category: 'Lacked' },
+  { question: 'What do you wish we had or longed for?', category: 'Longed For' },
+];
+
+const SPINNER_COLORS = [
+  '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#14b8a6', '#f97316', '#6366f1', '#10b981', '#e11d48', '#0ea5e9',
+];
+
+let spinnerState = {
+  spinning: false,
+  currentAngle: 0,
+  selectedPrompts: [],    // prompts that have been landed on
+  answers: {},            // { promptIndex: answerText }
+  submittedAnswers: {},   // { promptIndex: true } - tracks which have been submitted as tickets
+  history: [],            // history of spins
+};
+
+function spinTheWheel() {
+  if (spinnerState.spinning) return;
+  spinnerState.spinning = true;
+
+  const extraSpins = 5 + Math.floor(Math.random() * 5); // 5-9 full rotations
+  const randomAngle = Math.random() * 360;
+  const totalAngle = spinnerState.currentAngle + extraSpins * 360 + randomAngle;
+
+  spinnerState.currentAngle = totalAngle;
+
+  const wheel = document.getElementById('spinner-wheel');
+  if (wheel) {
+    wheel.style.transform = `rotate(${totalAngle}deg)`;
+  }
+
+  setTimeout(() => {
+    spinnerState.spinning = false;
+    // Calculate which segment we landed on
+    const normalizedAngle = (360 - (totalAngle % 360)) % 360;
+    const segmentAngle = 360 / SPINNER_PROMPTS.length;
+    const selectedIndex = Math.floor(normalizedAngle / segmentAngle);
+    const prompt = SPINNER_PROMPTS[selectedIndex];
+
+    // Add to selected prompts if not already there
+    if (!spinnerState.selectedPrompts.find(p => p.index === selectedIndex)) {
+      spinnerState.selectedPrompts.push({ index: selectedIndex, prompt });
+    }
+    render();
+  }, 4200);
+}
+
+function submitSpinnerAnswer(promptIndex) {
+  const answer = spinnerState.answers[promptIndex];
+  if (!answer || !answer.trim()) return;
+
+  const prompt = SPINNER_PROMPTS[promptIndex];
+  const noteText = `${answer.trim()}\n\n— "${prompt.question}"`;
+
+  // Add note to the active retro board
+  const retro = getRetro();
+  const board = retro.boards.find(b => b.id === retroState.spinnerBoardId);
+  if (!board) return;
+
+  // Try to find a matching column for this prompt category
+  const matchCol = board.columns.find(c => c.name.toLowerCase() === prompt.category.toLowerCase());
+  const colNotes = matchCol ? board.notes.filter(n => n.columnId === matchCol.id) : board.notes.filter(n => !n.columnId);
+
+  // Pick a note color based on the prompt's spinner color
+  const colorIdx = promptIndex % NOTE_COLORS.length;
+  const noteColor = NOTE_COLORS[colorIdx];
+
+  const note = {
+    id: uid(),
+    columnId: matchCol ? matchCol.id : null,
+    text: noteText,
+    color: noteColor.bg,
+    textColor: noteColor.text,
+    x: matchCol ? matchCol.x : colNotes.length * 240,
+    y: matchCol ? matchCol.y + 60 + colNotes.length * 180 : 100 + colNotes.length * 180,
+    votes: 0,
+    voters: [],
+    author: retroState.nickname || '',
+    createdAt: Date.now(),
+    spinnerPrompt: prompt.category
+  };
+  board.notes.push(note);
+
+  spinnerState.submittedAnswers[promptIndex] = true;
+  persist();
+}
+
+function resetSpinner() {
+  spinnerState = {
+    spinning: false,
+    currentAngle: 0,
+    selectedPrompts: [],
+    answers: {},
+    submittedAnswers: {},
+    history: [],
+  };
+  // Reset wheel rotation immediately
+  const wheel = document.getElementById('spinner-wheel');
+  if (wheel) {
+    wheel.style.transition = 'none';
+    wheel.style.transform = 'rotate(0deg)';
+    requestAnimationFrame(() => {
+      if (wheel) wheel.style.transition = '';
+    });
+  }
+  render();
+}
+
+function renderSpinner(proj) {
+  const segmentAngle = 360 / SPINNER_PROMPTS.length;
+
+  // Build SVG wheel
+  const size = 340;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2 - 4;
+
+  let segments = '';
+  SPINNER_PROMPTS.forEach((p, i) => {
+    const startAngle = i * segmentAngle - 90;
+    const endAngle = (i + 1) * segmentAngle - 90;
+    const startRad = (startAngle * Math.PI) / 180;
+    const endRad = (endAngle * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(startRad);
+    const y1 = cy + r * Math.sin(startRad);
+    const x2 = cx + r * Math.cos(endRad);
+    const y2 = cy + r * Math.sin(endRad);
+    const largeArc = segmentAngle > 180 ? 1 : 0;
+    const color = SPINNER_COLORS[i % SPINNER_COLORS.length];
+
+    // Text position (midpoint of arc)
+    const midAngle = ((startAngle + endAngle) / 2 * Math.PI) / 180;
+    const textR = r * 0.65;
+    const tx = cx + textR * Math.cos(midAngle);
+    const ty = cy + textR * Math.sin(midAngle);
+    const textAngle = (startAngle + endAngle) / 2;
+
+    const isSelected = spinnerState.selectedPrompts.find(sp => sp.index === i);
+    const opacity = isSelected ? '1' : '0.85';
+
+    segments += `
+      <path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z"
+        fill="${color}" opacity="${opacity}" stroke="#18181b" stroke-width="1.5"/>
+      <text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle"
+        transform="rotate(${textAngle}, ${tx}, ${ty})"
+        fill="white" font-size="10" font-family="JetBrains Mono, monospace" font-weight="600"
+        style="text-shadow: 0 1px 3px rgba(0,0,0,0.6);">
+        ${escHtml(p.category)}
+      </text>
+    `;
+  });
+
+  // Answer boxes for selected prompts
+  const answerBoxes = spinnerState.selectedPrompts.map(sp => {
+    const prompt = sp.prompt;
+    const idx = sp.index;
+    const isSubmitted = spinnerState.submittedAnswers[idx];
+    const color = SPINNER_COLORS[idx % SPINNER_COLORS.length];
+
+    if (isSubmitted) {
+      return `
+        <div class="spinner-submitted bg-zinc-900 border border-zinc-700 rounded-lg p-4 opacity-75">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-3 h-3 rounded-full" style="background:${color}"></div>
+            <span class="text-xs font-mono font-bold" style="color:${color}">${escHtml(prompt.category)}</span>
+            <span class="ml-auto text-xs text-green-400 font-mono flex items-center gap-1">
+              <i data-lucide="check-circle" class="w-3 h-3"></i> Note created
+            </span>
+          </div>
+          <p class="text-xs text-zinc-500 font-mono italic">"${escHtml(prompt.question)}"</p>
+          <p class="text-xs text-zinc-400 font-mono mt-1">${escHtml(spinnerState.answers[idx] || '')}</p>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="spinner-answer-card bg-zinc-900 border border-zinc-700 rounded-lg p-4 hover:border-amber-500/30 transition-colors">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-3 h-3 rounded-full" style="background:${color}"></div>
+          <span class="text-xs font-mono font-bold" style="color:${color}">${escHtml(prompt.category)}</span>
+        </div>
+        <p class="text-sm text-zinc-300 font-mono mb-3">${escHtml(prompt.question)}</p>
+        <div class="flex gap-2">
+          <input type="text" id="spinner-answer-${idx}" placeholder="Type your answer..."
+            value="${escHtml(spinnerState.answers[idx] || '')}"
+            oninput="spinnerState.answers[${idx}]=this.value"
+            onkeydown="if(event.key==='Enter' && this.value.trim()){ submitSpinnerAnswer(${idx}); }"
+            class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+          <button onclick="submitSpinnerAnswer(${idx})"
+            class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-1 flex-shrink-0">
+            <i data-lucide="plus" class="w-3 h-3"></i> Create Note
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const submittedCount = Object.keys(spinnerState.submittedAnswers).length;
+  const retro = proj.retro || { boards: [] };
+  const targetBoard = retro.boards.find(b => b.id === retroState.spinnerBoardId);
+  const boardName = targetBoard ? targetBoard.name : 'Unknown Board';
+
+  return `
+    <div class="max-w-5xl mx-auto p-4 sm:p-6">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-2">
+          <button onclick="retroState.showSpinner=false; render()"
+            class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </button>
+          <i data-lucide="disc" class="w-5 h-5 text-amber-500"></i>
+          <h2 class="font-mono font-bold text-lg text-zinc-100">Retro Spinner</h2>
+          <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">${escHtml(boardName)}</span>
+          ${submittedCount > 0 ? `<span class="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded font-mono">${submittedCount} note${submittedCount !== 1 ? 's' : ''} created</span>` : ''}
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="resetSpinner()"
+            class="text-zinc-400 hover:text-zinc-200 font-mono text-xs px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors flex items-center gap-1">
+            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
+          </button>
+          <button onclick="retroState.showSpinner=false; retroState.activeBoardId=retroState.spinnerBoardId; retroState.canvas={panX:0,panY:0,zoom:1}; render()"
+            class="text-zinc-400 hover:text-zinc-200 font-mono text-xs px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors flex items-center gap-1">
+            <i data-lucide="layout-dashboard" class="w-3 h-3"></i> View Board
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-col lg:flex-row gap-8 items-start">
+        <!-- Spinner Wheel -->
+        <div class="flex flex-col items-center gap-4 flex-shrink-0">
+          <div class="relative">
+            <div class="spinner-pointer"></div>
+            <svg id="spinner-wheel" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"
+              class="spinner-wheel rounded-full"
+              style="transform: rotate(${spinnerState.currentAngle}deg);">
+              ${segments}
+              <circle cx="${cx}" cy="${cy}" r="24" fill="#18181b" stroke="#f59e0b" stroke-width="2"/>
+              <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle"
+                fill="#f59e0b" font-size="10" font-family="JetBrains Mono, monospace" font-weight="700">SPIN</text>
+            </svg>
+          </div>
+          <button onclick="spinTheWheel()"
+            ${spinnerState.spinning ? 'disabled' : ''}
+            class="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-900 font-mono font-bold px-6 py-3 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+            <i data-lucide="${spinnerState.spinning ? 'loader' : 'play'}" class="w-4 h-4 ${spinnerState.spinning ? 'animate-spin' : ''}"></i>
+            ${spinnerState.spinning ? 'Spinning...' : 'Spin the Wheel'}
+          </button>
+          <p class="text-xs text-zinc-500 font-mono text-center max-w-xs">
+            Spin the wheel to get a retro prompt. Answer it and a note will be added to the retro board automatically.
+          </p>
+        </div>
+
+        <!-- Answer Boxes -->
+        <div class="flex-1 w-full">
+          ${spinnerState.selectedPrompts.length === 0 ? `
+            <div class="flex flex-col items-center justify-center py-16 text-zinc-600 border border-zinc-800 rounded-lg border-dashed">
+              <i data-lucide="message-circle-question" class="w-10 h-10 mb-3"></i>
+              <p class="font-mono text-sm mb-1">No prompts yet</p>
+              <p class="text-xs text-zinc-600">Spin the wheel to get your first retro prompt</p>
+            </div>
+          ` : `
+            <div class="space-y-3">
+              <h3 class="font-mono text-xs text-zinc-500 uppercase tracking-wider mb-3">Retro Prompts (${spinnerState.selectedPrompts.length})</h3>
+              ${answerBoxes}
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 const NOTE_COLORS = [
   { name: 'Yellow', bg: '#fef08a', text: '#713f12' },
   { name: 'Green', bg: '#bbf7d0', text: '#14532d' },
@@ -1929,6 +2222,8 @@ let retroState = {
   timer: { running: false, done: false, seconds: 0, total: 300 },
   _timerInterval: null,
   showNewBoardDialog: false,
+  showSpinner: false,
+  spinnerBoardId: null,
 };
 
 // IP-based nickname persistence
@@ -2830,12 +3125,23 @@ function renderRetroTimerDisplay() {
 
 // ─── Retro Rendering ──────────────────────────────────────────────────────────
 
+function openSpinnerForBoard(boardId) {
+  retroState.spinnerBoardId = boardId;
+  retroState.showSpinner = true;
+  spinnerState = { spinning: false, currentAngle: 0, selectedPrompts: [], answers: {}, submittedAnswers: {}, history: [] };
+  render();
+}
+
 function renderRetro(proj) {
   const retro = proj.retro || { boards: [] };
   const board = retro.boards.find(b => b.id === retroState.activeBoardId);
 
   if (retroState.showNewBoardDialog) {
     return renderNewBoardDialog();
+  }
+
+  if (retroState.showSpinner) {
+    return renderSpinner(proj);
   }
 
   if (!board) {
@@ -2847,10 +3153,12 @@ function renderRetro(proj) {
             <i data-lucide="message-square" class="w-5 h-5 text-amber-500"></i>
             <h2 class="font-mono font-bold text-lg text-zinc-100">Retrospectives</h2>
           </div>
-          <button onclick="retroState.showNewBoardDialog=true; render()"
-            class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
-            <i data-lucide="plus" class="w-4 h-4"></i> New Retro
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="retroState.showNewBoardDialog=true; render()"
+              class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+              <i data-lucide="plus" class="w-4 h-4"></i> New Retro
+            </button>
+          </div>
         </div>
 
         ${retro.boards.length === 0 ? `
@@ -2870,10 +3178,16 @@ function renderRetro(proj) {
                 onclick="retroState.activeBoardId='${b.id}'; retroState.canvas={panX:0,panY:0,zoom:1}; render()">
                 <div class="flex items-start justify-between mb-3">
                   <h3 class="font-mono font-bold text-zinc-100 text-sm">${escHtml(b.name)}</h3>
-                  <button onclick="event.stopPropagation(); deleteRetroBoard('${b.id}')"
-                    class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-1 rounded transition-all">
-                    <i data-lucide="trash-2" class="w-3 h-3"></i>
-                  </button>
+                  <div class="flex items-center gap-1">
+                    <button onclick="event.stopPropagation(); openSpinnerForBoard('${b.id}')"
+                      class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-amber-400 p-1 rounded transition-all" title="Spinner game">
+                      <i data-lucide="disc" class="w-3 h-3"></i>
+                    </button>
+                    <button onclick="event.stopPropagation(); deleteRetroBoard('${b.id}')"
+                      class="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-1 rounded transition-all">
+                      <i data-lucide="trash-2" class="w-3 h-3"></i>
+                    </button>
+                  </div>
                 </div>
                 <div class="flex gap-2 mb-3">
                   ${b.columns.map(c => `<span class="text-xs px-2 py-0.5 rounded font-mono" style="background:${c.color}20; color:${c.color}">${escHtml(c.name)}</span>`).join('')}
@@ -3031,6 +3345,11 @@ function renderRetroCanvas(board) {
             class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
             <i data-lucide="columns-3" class="w-3 h-3"></i> Column
           </button>
+          <div class="w-px h-6 bg-zinc-700"></div>
+          <button onclick="openSpinnerForBoard('${board.id}')"
+            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
+            <i data-lucide="disc" class="w-3 h-3"></i> Spinner
+          </button>
         </div>
       </div>
 
@@ -3106,7 +3425,8 @@ function renderRetroNote(note) {
           </button>
         </div>
       </div>
-      <textarea id="retro-note-${note.id}" rows="3"
+      ${note.spinnerPrompt ? `<div class="flex items-center gap-1 mb-1"><span style="opacity:0.6; font-size:10px; font-family:JetBrains Mono,monospace; background:${note.textColor}15; padding:1px 6px; border-radius:3px;">&#127922; ${escHtml(note.spinnerPrompt)}</span></div>` : ''}
+      <textarea id="retro-note-${note.id}" rows="${note.spinnerPrompt ? 6 : 3}"
         style="color:${note.textColor};"
         onblur="updateRetroNote('${note.id}', {text: this.value})"
         placeholder="Type here...">${escHtml(note.text)}</textarea>
