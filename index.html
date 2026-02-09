@@ -2614,13 +2614,13 @@ function renderEmojiPicker() {
   let catTabs = '';
   if (!_emojiSearch) {
     if (_emojiAnimated) {
-      catTabs = `<div class="flex gap-1 mb-3 overflow-x-auto pb-1" style="scrollbar-width:thin;">
+      catTabs = `<div class="flex flex-wrap gap-1 mb-3">
         ${ANIMATED_CATS.map(cat => `<button onclick="_animatedCat='${cat}'; renderEmojiPicker();"
           class="flex-shrink-0 px-2 py-1 rounded-lg text-xs font-mono transition-colors ${cat === _animatedCat ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-500'}"
           title="${cat}">${ANIMATED_CAT_ICONS[cat] || '📁'} ${cat}</button>`).join('')}
       </div>`;
     } else {
-      catTabs = `<div class="flex gap-1 mb-3 overflow-x-auto pb-1" style="scrollbar-width:thin;">
+      catTabs = `<div class="flex flex-wrap gap-1 mb-3">
         ${Object.keys(EMOJI_CATEGORIES).map(cat => `<button onclick="_emojiActiveCat='${cat}'; renderEmojiPicker();"
           class="flex-shrink-0 px-2 py-1 rounded-lg text-xs font-mono transition-colors ${cat === _emojiActiveCat ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-500'}"
           title="${cat}">${EMOJI_CAT_ICONS[cat] || '📁'} ${cat}</button>`).join('')}
@@ -2631,7 +2631,7 @@ function renderEmojiPicker() {
   el.innerHTML = `
     <div class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);"
       onclick="if(event.target===this) closeEmojiPicker();">
-      <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-full max-w-md flex flex-col" style="max-height:560px;">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-5 w-full max-w-lg flex flex-col" style="max-height:80vh;">
         <div class="flex items-center justify-between mb-3">
           <h3 class="font-mono font-bold text-zinc-100">Add Emoji</h3>
           <div class="flex items-center gap-2">
@@ -2650,11 +2650,11 @@ function renderEmojiPicker() {
           oninput="_emojiSearch=this.value; renderEmojiPicker(); document.getElementById('emoji-search')?.focus(); setTimeout(()=>{const i=document.getElementById('emoji-search');if(i){i.selectionStart=i.selectionEnd=i.value.length;}},0);"
           class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none mb-3">
         ${catTabs}
-        <div class="flex-1 overflow-y-auto" style="scrollbar-width:thin;">
+        <div class="flex-1 overflow-y-auto" style="scrollbar-width:thin; min-height:200px;">
           ${gridHtml}
           ${count === 0 ? '<div class="text-center text-xs text-zinc-500 font-mono py-8">No emojis found</div>' : ''}
         </div>
-        <div class="text-xs text-zinc-500 font-mono text-center mt-2">${count} emojis${_emojiAnimated ? ' (animated)' : ''}</div>
+        <div class="text-xs text-zinc-500 font-mono text-center mt-2 flex-shrink-0">${count} emojis${_emojiAnimated ? ' (animated)' : ''}</div>
       </div>
     </div>
   `;
