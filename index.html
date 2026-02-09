@@ -1985,7 +1985,7 @@ function submitSpinnerAnswer(promptIndex) {
   if (!answer || !answer.trim()) return;
 
   const prompt = SPINNER_PROMPTS[promptIndex];
-  const noteText = `[${prompt.category}] ${prompt.question}\n\n${answer.trim()}`;
+  const noteText = `${answer.trim()}\n\n— "${prompt.question}"`;
 
   // Add note to the active retro board
   const retro = getRetro();
@@ -2007,11 +2007,12 @@ function submitSpinnerAnswer(promptIndex) {
     color: noteColor.bg,
     textColor: noteColor.text,
     x: matchCol ? matchCol.x : colNotes.length * 240,
-    y: matchCol ? matchCol.y + 60 + colNotes.length * 140 : 100 + colNotes.length * 140,
+    y: matchCol ? matchCol.y + 60 + colNotes.length * 180 : 100 + colNotes.length * 180,
     votes: 0,
     voters: [],
     author: retroState.nickname || '',
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    spinnerPrompt: prompt.category
   };
   board.notes.push(note);
 
@@ -3424,7 +3425,8 @@ function renderRetroNote(note) {
           </button>
         </div>
       </div>
-      <textarea id="retro-note-${note.id}" rows="3"
+      ${note.spinnerPrompt ? `<div class="flex items-center gap-1 mb-1"><span style="opacity:0.6; font-size:10px; font-family:JetBrains Mono,monospace; background:${note.textColor}15; padding:1px 6px; border-radius:3px;">&#127922; ${escHtml(note.spinnerPrompt)}</span></div>` : ''}
+      <textarea id="retro-note-${note.id}" rows="${note.spinnerPrompt ? 6 : 3}"
         style="color:${note.textColor};"
         onblur="updateRetroNote('${note.id}', {text: this.value})"
         placeholder="Type here...">${escHtml(note.text)}</textarea>
