@@ -1988,6 +1988,8 @@ const CSV_HEADER_MAP = {
   'parent': 'parent', 'parent id': 'parent', 'parent_id': 'parent',
   'epic link': 'epicLink', 'epic_link': 'epicLink',
   'epic name': 'epicName', 'epic_name': 'epicName',
+  'issue id': 'issueId', 'issue_id': 'issueId', 'issueid': 'issueId', 'id': 'issueId', 'issue key': 'issueId', 'key': 'issueId',
+  'acceptance criteria': 'acceptanceCriteria', 'acceptance_criteria': 'acceptanceCriteria',
   'sprint': 'sprint', 'status': 'status',
   'component': 'component', 'components': 'component',
   'fix version': 'fixVersion', 'fix_version': 'fixVersion'
@@ -1998,8 +2000,25 @@ const ISSUE_TYPE_MAP = {
   'story': 'story', 'task': 'story', 'sub-task': 'story', 'subtask': 'story', 'bug': 'story', 'user story': 'story'
 };
 
+function splitCSVLines(text) {
+  const lines = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') { inQuotes = !inQuotes; current += ch; }
+    else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && text[i + 1] === '\n') i++; // skip CRLF
+      if (current.trim()) lines.push(current);
+      current = '';
+    } else { current += ch; }
+  }
+  if (current.trim()) lines.push(current);
+  return lines;
+}
+
 function parseBulkImportCSV(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const lines = splitCSVLines(text);
   if (lines.length < 2) return { items: [], error: 'CSV must have a header row and at least one data row.', projectLabels: [] };
   const rawHeaders = parseCSVRow(lines[0]).map(h => h.toLowerCase().trim());
   const headers = rawHeaders.map(h => CSV_HEADER_MAP[h] || h);
@@ -2008,11 +2027,23 @@ function parseBulkImportCSV(text) {
   const hasType = headers.includes('type');
   const hasEpicLink = headers.includes('epicLink');
   const hasEpicName = headers.includes('epicName');
+  const hasIssueId = headers.includes('issueId');
+  const hasAcceptanceCriteria = headers.includes('acceptanceCriteria');
   // Collect indices for multi-value label columns (Jira pattern)
   const labelIndices = [];
   headers.forEach((h, idx) => { if (h === 'labels') labelIndices.push(idx); });
   const items = [];
   const errors = [];
+  // First pass: build issueId -> title map for parent linking
+  const idToTitle = {};
+  if (hasIssueId) {
+    for (let i = 1; i < lines.length; i++) {
+      const vals = parseCSVRow(lines[i]);
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+      if (row.issueId && row.title) idToTitle[row.issueId] = row.title;
+    }
+  }
   for (let i = 1; i < lines.length; i++) {
     const vals = parseCSVRow(lines[i]);
     const row = {};
@@ -2043,10 +2074,24 @@ function parseBulkImportCSV(text) {
       continue;
     }
     const priority = PRIORITY_ALIASES[(row.priority || 'medium').toLowerCase()] || 'medium';
-    // Parent: use Epic Link (Jira) or Parent column
-    let parent = row.parent || '';
+    // Parent resolution: Issue Id reference > Epic Link > title match
+    let parent = '';
+    if (row.parent) {
+      // If Parent is a numeric ID and we have an ID map, resolve to title
+      parent = (hasIssueId && idToTitle[row.parent]) ? idToTitle[row.parent] : row.parent;
+    }
     if (!parent && hasEpicLink && row.epicLink) {
       parent = row.epicLink;
+    }
+    // Parse acceptance criteria into subtasks
+    let subtasks = [];
+    if (hasAcceptanceCriteria && row.acceptanceCriteria) {
+      subtasks = row.acceptanceCriteria
+        .split('\n').join('||')  // handle literal newlines
+        .split('||')
+        .map(line => line.replace(/^\s*[\*\-\u2022]\s*/, '').trim())
+        .filter(Boolean)
+        .map(ac => ({ title: ac, done: false }));
     }
     const sp = row.storyPoints || '';
     items.push({
@@ -2059,9 +2104,9 @@ function parseBulkImportCSV(text) {
       storyPoints: sp ? sp + (sp.match(/SP$/i) ? '' : ' SP') : '',
       assignee: row.assignee || '',
       parent,
-      subtasks: [],
+      subtasks,
       blockedBy: [],
-      sourceId: ''
+      sourceId: row.issueId || ''
     });
   }
   if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n'), projectLabels: [] };
