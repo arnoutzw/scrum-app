@@ -1,0 +1,161 @@
+"Issue Type","Issue Id","Parent","Summary","Description","Priority","Story Points","Sprint","Labels","Labels","Acceptance Criteria"
+"Epic","1","","Mechanical Design & 3D Printing","Design, print, and assemble all structural components of the 6-DoF arm using BambuLab printer.","High","","","phase-1-mvp","",""
+"Epic","2","","Electronics & Wiring","Design and assemble the power system, motor drivers, encoders, and wiring harness.","High","","","phase-1-mvp","",""
+"Epic","3","","Motor Control (SimpleFOC + ESP32)","Bring up SimpleFOC on ESP32: single motor, multi-motor, PID tuning, safety, and homing.","High","","","phase-1-mvp","",""
+"Epic","4","","Manual Joint Setpoint Interface","User-facing interfaces for manual joint control: serial CLI, web dashboard, and gamepad.","High","","","phase-1-mvp","",""
+"Epic","5","","MVP Integration & Testing","End-to-end integration testing, payload characterization, and documentation for MVP release.","High","","","phase-1-mvp","",""
+"Epic","6","","Raspberry Pi Integration","Establish reliable high-speed communication between Raspberry Pi and ESP32, and set up RPi environment.","High","","","phase-2-vision","",""
+"Epic","7","","Camera & Vision System","Set up high-speed camera, calibrate, implement color tracking, and estimate 3D target position.","High","","","phase-2-vision","",""
+"Epic","8","","Inverse Kinematics Engine","Implement forward kinematics, IK solver, and workspace analysis for the 6-DoF arm.","High","","","phase-2-vision","",""
+"Epic","9","","Path Planning","Trajectory interpolation in joint and Cartesian space, collision avoidance, and real-time tracking loop.","High","","","phase-2-vision","",""
+"Epic","10","","Autonomous Ops & Demo","End-to-end autonomous demos, monitoring dashboard, performance metrics, and final documentation.","High","","","phase-2-vision","",""
+"Story","101","1","Parametric CAD model of all 6 joints","As an engineer, I want a parametric CAD model of all 6 joints so that I can iterate on dimensions quickly.","Highest","8","Sprint 1","mechanical","phase-1-mvp","* Full 6-DoF assembly in Fusion 360 / SolidWorks
+* Each joint parameterized (length, bore, offset)
+* BOM exported"
+"Story","102","1","Bearing housings and shaft couplers for iPower GM4108","As an engineer, I want bearing housings and shaft couplers designed for iPower GM4108 motors so that shafts are rigid and concentric.","Highest","5","Sprint 1","mechanical","phase-1-mvp","* Shaft coupler fits 8mm motor shaft
+* Bearing seat tolerances +/-0.1mm
+* Test-fit print verified"
+"Story","103","1","Stable base plate with mounting holes","As an engineer, I want a stable base plate with mounting holes so the arm doesn't tip during operation.","Highest","3","Sprint 1","mechanical","phase-1-mvp","* Base footprint >= 150x150mm
+* M4 mounting holes on 100mm grid
+* Weighted or bolt-down option"
+"Story","104","1","Modular end-effector mount","As an engineer, I want a modular end-effector mount so I can swap grippers or tool heads later.","High","3","Sprint 2","mechanical","phase-1-mvp","* Standard dovetail or bolt pattern
+* Quick-release mechanism
+* <= 50g added mass"
+"Story","105","1","Optimized print orientation for all parts","As an engineer, I want all parts printed on BambuLab with optimized orientation so that layer lines don't weaken critical joints.","Highest","5","Sprint 2","mechanical","phase-1-mvp","* Print profiles documented (PLA/PETG, infill%, supports)
+* Critical joints printed flat or with inserts
+* Total print time < 30h"
+"Story","106","1","Assembly guide with hardware BOM","As an engineer, I want an assembly guide with hardware BOM so that anyone can reproduce the build.","High","3","Sprint 3","mechanical","documentation","* Step-by-step photo assembly guide
+* BOM with supplier links
+* Fastener torque specs"
+"Story","107","2","Power distribution board for all motors + ESP32","As an engineer, I want a power distribution board that supplies 12V to all 6 motors and 3.3V to the ESP32 so that the system runs from a single PSU.","Highest","5","Sprint 2","electronics","phase-1-mvp","* Single 12V 10A+ PSU input
+* Per-motor fusing or polyfuse
+* 3.3V buck converter for ESP32
+* Reverse polarity protection"
+"Story","108","2","Current sensing on Joint 1 and Joint 2","As an engineer, I want current sensing on at least Joint 1 and Joint 2 so I can detect stalls and overloads.","High","5","Sprint 3","electronics","phase-1-mvp","* INA219 or ACS712 per channel
+* I2C readable from ESP32
+* Alert threshold configurable"
+"Story","109","2","SimpleFOC-compatible drivers for all 6 motors","As an engineer, I want each motor connected to a SimpleFOC-compatible driver so that FOC runs at >=10kHz PWM.","Highest","8","Sprint 2","electronics","phase-1-mvp","* 6 driver boards wired and tested
+* PWM frequency verified >= 10kHz
+* Heat sinks on FETs if needed"
+"Story","110","2","Magnetic encoders on each joint","As an engineer, I want magnetic encoders (AS5048A/AS5600) on each joint so that SimpleFOC has closed-loop position feedback.","Highest","8","Sprint 2","electronics","phase-1-mvp","* 6x encoders mounted and aligned
+* SPI or I2C bus verified (no address conflicts)
+* Resolution >= 14-bit"
+"Story","111","2","Cable routing plan with strain relief","As an engineer, I want a cable routing plan with strain relief so that wires don't snag or fatigue during arm motion.","Highest","3","Sprint 3","electronics","phase-1-mvp","* Cable channels in CAD
+* JST connectors for quick disconnect
+* Flex-rated wire for moving joints"
+"Story","112","3","Open-loop voltage mode on single motor","As an engineer, I want to spin a single iPower motor in open-loop voltage mode via SimpleFOC so that I verify driver + encoder wiring.","Highest","3","Sprint 2","firmware","phase-1-mvp","* Motor spins smoothly in open-loop
+* No cogging or skipping
+* Current draw < 1A at no-load"
+"Story","113","3","Closed-loop angle control with PID tuning","As an engineer, I want closed-loop angle control on a single motor with PID tuning so that I can hold a setpoint within +/-0.5 degrees.","Highest","5","Sprint 3","firmware","phase-1-mvp","* Angle mode with sensor feedback
+* PID gains documented
+* Step response < 200ms settle time
+* Steady-state error < 0.5 degrees"
+"Story","114","3","6 motors closed-loop simultaneously at >= 1kHz","As an engineer, I want all 6 motors running closed-loop simultaneously on a single ESP32 so that the control loop stays above 1kHz.","Highest","13","Sprint 4","firmware","phase-1-mvp","* 6 motor instances initialized
+* Loop frequency >= 1kHz measured
+* No I2C/SPI bus contention
+* If needed, dual-ESP32 with CAN bus"
+"Story","115","3","Software joint limits (min/max angle)","As an engineer, I want software joint limits (min/max angle per joint) so the arm can't self-collide or over-extend.","Highest","3","Sprint 4","firmware","phase-1-mvp","* Configurable min/max per joint in code
+* Motor stops smoothly at limit
+* Limits survive reboot (stored in NVS)"
+"Story","116","3","Homing sequence with limit switches or index pulses","As an engineer, I want a homing sequence using limit switches or index pulses so that absolute position is known after power-on.","High","5","Sprint 5","firmware","phase-1-mvp","* Each joint homes to a known zero
+* Homing speed is slow and safe
+* Status LED indicates homing complete"
+"Story","117","3","Emergency stop (hardware + software watchdog)","As an engineer, I want an emergency stop (hardware button + software watchdog) so the arm can be killed instantly.","Highest","3","Sprint 4","firmware","electronics","* Physical E-stop button cuts motor power
+* Software watchdog triggers if loop stalls > 50ms
+* Watchdog logs fault reason to serial"
+"Story","118","4","Serial command interface for joint angles","As a user, I want to send target angles via serial commands (e.g., 'J1 45.0') so I can control each joint from a terminal.","Highest","5","Sprint 4","firmware","phase-1-mvp","* Parse 'Jn <angle>' commands
+* Respond with current position
+* Handle bad input gracefully"
+"Story","119","4","STATUS command for all joint angles and currents","As a user, I want a 'STATUS' command that prints all 6 joint angles and motor currents so I can monitor the arm state.","High","2","Sprint 5","firmware","phase-1-mvp","* Formatted table output
+* Updates at <= 100ms if in stream mode
+* Shows fault flags"
+"Story","120","4","ESP32-hosted web UI with 6 sliders","As a user, I want a simple web UI hosted on the ESP32 (WebSocket) with 6 sliders so I can move joints without a terminal.","High","8","Sprint 5","software","phase-1-mvp","* ESP32 serves HTML page via WiFi AP
+* 6 sliders with degree labels
+* Real-time position feedback on UI
+* Latency < 50ms"
+"Story","121","4","Save and replay joint poses (teach mode)","As a user, I want to save and replay joint poses (teach mode) so I can record a sequence and play it back.","Medium","5","Sprint 6","software","phase-1-mvp","* 'Record Pose' button stores 6 angles
+* 'Play Sequence' replays in order
+* Adjustable playback speed
+* Stored in ESP32 SPIFFS"
+"Story","122","4","Bluetooth gamepad control for joint jogging","As a user, I want to control the arm with a Bluetooth gamepad so I can jog joints intuitively.","Medium","5","Sprint 6","firmware","phase-1-mvp","* ESP32 BLE pairs with standard gamepad
+* Stick axes map to joint velocity
+* Deadzone and sensitivity configurable"
+"Story","123","5","Full integration test checklist","As an engineer, I want a full integration test checklist so I can verify the assembled arm meets MVP criteria.","Highest","5","Sprint 6","testing","phase-1-mvp","* All 6 joints move to commanded angles
+* Repeatability < 1 degree over 10 cycles
+* No overheating after 30 min
+* E-stop verified"
+"Story","124","5","Max payload measurement at various extensions","As an engineer, I want to measure the max payload at full extension so I can spec the arm for real tasks.","High","3","Sprint 7","testing","phase-1-mvp","* Payload tested at 100%, 75%, 50% extension
+* Motor current vs. load curve plotted
+* Max safe payload documented"
+"Story","125","5","GitHub repo with wiring diagrams, CAD, firmware, and setup guide","As a contributor, I want a GitHub repo with wiring diagrams, CAD files, firmware, and setup instructions so others can replicate the build.","High","5","Sprint 7","documentation","phase-1-mvp","* README with overview and photos
+* /cad, /firmware, /electronics folders
+* Flashing instructions for ESP32
+* License file (MIT/Apache)"
+"Story","126","6","Serial protocol for >= 100Hz joint commands (RPi <-> ESP32)","As an engineer, I want a serial (UART) or USB protocol between RPi and ESP32 so the Pi can send joint commands at >= 100Hz.","Highest","8","Sprint 8","firmware","phase-2-vision","* Packet format defined (header, 6x float32, checksum)
+* Roundtrip latency < 5ms
+* Error recovery on dropped packets"
+"Story","127","6","Joint state streaming from ESP32 to RPi","As an engineer, I want the ESP32 to stream joint states back to the RPi so the IK solver has real-time feedback.","Highest","3","Sprint 8","firmware","phase-2-vision","* Joint angles + velocities at 100Hz
+* Timestamps synced
+* Buffering handles jitter"
+"Story","128","6","Reproducible RPi image with all dependencies","As an engineer, I want a reproducible RPi image (Raspberry Pi OS Lite + deps) so any team member can flash and run.","High","3","Sprint 8","software","phase-2-vision","* Ansible playbook or shell script
+* Python 3.11+, OpenCV, NumPy pre-installed
+* Auto-start service for arm controller"
+"Story","129","7","ArduCam streaming at 200 FPS","As an engineer, I want the ArduCam configured to stream 200 FPS at a usable resolution (>= 320x240) so the vision pipeline has fast frames.","Highest","5","Sprint 8","vision","phase-2-vision","* 200 FPS verified with timestamp delta
+* Resolution >= 320x240
+* Exposure and gain tunable
+* CSI or USB3 connection to RPi"
+"Story","130","7","Intrinsic camera calibration (checkerboard)","As an engineer, I want intrinsic camera calibration (checkerboard method) so pixel coordinates map accurately to world coordinates.","Highest","3","Sprint 9","vision","phase-2-vision","* Calibration matrix and distortion coefficients saved
+* Reprojection error < 0.5px
+* Calibration script in repo"
+"Story","131","7","Real-time HSV color-based object detection at >= 100 FPS","As a user, I want real-time color-based object detection (HSV thresholding) so the arm can track a colored ball at >= 100 FPS.","Highest","5","Sprint 9","vision","phase-2-vision","* HSV range configurable via UI or config file
+* Centroid + bounding box output
+* Handles partial occlusion
+* Processing >= 100 FPS on RPi"
+"Story","132","7","Mono 3D position estimation from known object size","As an engineer, I want to estimate the 3D position of the tracked object from a single camera using known object size so the IK solver gets XYZ targets.","Highest","8","Sprint 10","vision","phase-2-vision","* Mono depth estimation from known object diameter
+* Output: (X, Y, Z) in arm base frame
+* Accuracy <= 10mm at 300mm range
+* Hand-eye calibration completed"
+"Story","133","7","3D-printed camera mount with known transform to arm base","As an engineer, I want a 3D-printed camera mount with known transform to the arm base so hand-eye calibration is repeatable.","High","3","Sprint 9","mechanical","phase-2-vision","* Rigid mount, no vibration
+* Known (X, Y, Z, R, P, Y) offset to base
+* Eye-to-hand or eye-in-hand config documented"
+"Story","134","8","Forward kinematics validated against CAD model","As an engineer, I want forward kinematics (DH parameter table) validated against the CAD model so FK matches physical geometry within 1mm.","Highest","5","Sprint 9","software","phase-2-vision","* DH table for all 6 joints documented
+* FK output vs. CAD measurement < 1mm error
+* Python FK function unit-tested"
+"Story","135","8","6-DoF IK solver under 1ms solve time","As an engineer, I want an analytical or numerical IK solver that computes joint angles for a target (X, Y, Z, Roll, Pitch, Yaw) in < 1ms.","Highest","13","Sprint 10","software","phase-2-vision","* Solves for full 6-DoF pose
+* Handles multiple solutions (elbow up/down)
+* Returns closest solution to current pose
+* Solve time < 1ms on RPi"
+"Story","136","8","IK solver rejects unreachable targets gracefully","As an engineer, I want the IK solver to reject unreachable targets gracefully so the arm doesn't attempt impossible poses.","Highest","3","Sprint 10","software","phase-2-vision","* Workspace boundary check before solve
+* Returns error code for out-of-reach
+* Suggests nearest reachable point"
+"Story","137","8","3D visualization of reachable workspace","As an engineer, I want a visualization of the arm's reachable workspace so I can position objects within range.","Medium","5","Sprint 11","software","phase-2-vision","* 3D point cloud of reachable positions
+* Matplotlib or web-based visualization
+* Color-coded by manipulability index"
+"Story","138","9","Trapezoidal velocity profile interpolation","As an engineer, I want trapezoidal velocity profile interpolation in joint space so movements are smooth and respect velocity limits.","Highest","5","Sprint 10","software","phase-2-vision","* Configurable max velocity and acceleration per joint
+* S-curve or trapezoidal profile
+* Waypoint queue with blending"
+"Story","139","9","Straight-line Cartesian end-effector paths","As a user, I want the end-effector to move in a straight line in Cartesian space so the arm can follow a linear trajectory to the target.","Highest","8","Sprint 11","software","phase-2-vision","* Linear interpolation in task space
+* IK solved at each waypoint (>= 50 pts/sec)
+* Singularity detection and avoidance"
+"Story","140","9","Self-collision checking during planned moves","As an engineer, I want basic self-collision checking so the arm doesn't crash into itself during planned moves.","High","8","Sprint 12","software","phase-2-vision","* Simplified geometric model (cylinders per link)
+* Collision check at each waypoint
+* Path rejected if collision detected"
+"Story","141","9","Continuous real-time colored object tracking","As a user, I want the arm to continuously follow a moving colored object in real-time so it tracks the ball smoothly.","Highest","13","Sprint 12","vision","software","* Vision -> IK -> Command pipeline at >= 30Hz
+* Predictive filtering (Kalman or EMA)
+* Smooth motion even with noisy detections
+* Graceful stop when object lost"
+"Story","142","10","Autonomous pick-and-place of colored object","As a user, I want the arm to autonomously pick up a colored object and place it at a target location so I can demo the full pipeline.","High","13","Sprint 13","testing","phase-2-vision","* Detects object -> plans path -> picks -> places
+* Success rate >= 70% over 10 trials
+* End-to-end latency < 3s"
+"Story","143","10","RPi web dashboard with camera feed and IK overlay","As a user, I want a web dashboard on the RPi showing camera feed, joint states, and IK target so I can monitor autonomous operation.","High","8","Sprint 13","software","phase-2-vision","* Live camera stream with overlay
+* Joint angle gauges
+* IK target marker on video
+* Mode selector (manual / track / auto)"
+"Story","144","10","Logged performance metrics and analysis notebook","As an engineer, I want logged metrics (tracking error, loop timing, success rate) so I can benchmark and improve the system.","High","5","Sprint 14","testing","phase-2-vision","* CSV logging of key metrics per run
+* Tracking error (mm) histogram
+* Loop timing statistics
+* Dashboard or Jupyter notebook for analysis"
+"Story","145","10","Full system documentation with demo videos","As a contributor, I want full system documentation including vision pipeline, IK math, and demo videos so the project is presentable to investors or open-source community.","High","5","Sprint 14","documentation","phase-2-vision","* Architecture diagram
+* IK derivation document
+* Demo video (60s) on YouTube/GitHub
+* Setup guide for Phase 2 hardware"
