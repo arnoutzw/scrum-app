@@ -1009,9 +1009,26 @@ function renderBacklog(proj) {
           ` : ''}
         </div>
         <div class="flex items-center gap-2">
+          <div class="relative">
+            <button onclick="document.getElementById('export-dropdown').classList.toggle('hidden')"
+              class="bg-zinc-700 hover:bg-zinc-600 text-zinc-100 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+              <i data-lucide="download" class="w-4 h-4"></i> Export
+              <i data-lucide="chevron-down" class="w-3 h-3 opacity-60"></i>
+            </button>
+            <div id="export-dropdown" class="hidden absolute right-0 mt-1 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden">
+              <button onclick="exportProjectCSV(); document.getElementById('export-dropdown').classList.add('hidden')"
+                class="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-green-400"></i> Export as CSV
+              </button>
+              <button onclick="exportProjectJSON(); document.getElementById('export-dropdown').classList.add('hidden')"
+                class="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2">
+                <i data-lucide="braces" class="w-4 h-4 text-blue-400"></i> Export as JSON
+              </button>
+            </div>
+          </div>
           <button onclick="openBulkImportModal()"
             class="bg-zinc-700 hover:bg-zinc-600 text-zinc-100 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
-            <i data-lucide="upload" class="w-4 h-4"></i> Bulk Import
+            <i data-lucide="upload" class="w-4 h-4"></i> Import
           </button>
           <button onclick="promptQuickAdd('backlog')"
             class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
@@ -1577,6 +1594,76 @@ function renderSettings(proj) {
         </div>
       </div>
 
+      <!-- Export & Import (Jira-Compatible) -->
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-amber-400 mb-3 flex items-center gap-2">
+          <i data-lucide="arrow-right-left" class="w-5 h-5"></i> Export &amp; Import
+          <span class="text-[10px] font-normal px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Jira Compatible</span>
+        </h3>
+        <p class="text-xs text-zinc-500 mb-4">Export cards as Jira-compatible CSV or JSON. Re-import exported files for round-trip data transfer.</p>
+
+        <!-- Export Section -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <div class="flex items-center justify-between bg-zinc-800/50 rounded-lg p-3">
+            <div>
+              <p class="text-sm text-zinc-300 flex items-center gap-1.5">
+                <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-green-400"></i> Export CSV
+              </p>
+              <p class="text-[10px] text-zinc-500 mt-0.5">Jira-compatible spreadsheet format</p>
+            </div>
+            <button onclick="exportProjectCSV()"
+              class="bg-green-600/20 hover:bg-green-600/30 text-green-400 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+              <i data-lucide="download" class="w-3 h-3"></i> CSV
+            </button>
+          </div>
+          <div class="flex items-center justify-between bg-zinc-800/50 rounded-lg p-3">
+            <div>
+              <p class="text-sm text-zinc-300 flex items-center gap-1.5">
+                <i data-lucide="braces" class="w-3.5 h-3.5 text-blue-400"></i> Export JSON
+              </p>
+              <p class="text-[10px] text-zinc-500 mt-0.5">Hierarchical epic/feature/story format</p>
+            </div>
+            <button onclick="exportProjectJSON()"
+              class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+              <i data-lucide="download" class="w-3 h-3"></i> JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Import Section (Round-Trip) -->
+        <div class="border-t border-zinc-800 pt-4">
+          <p class="text-xs text-zinc-400 mb-3 flex items-center gap-1.5">
+            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Round-trip Import &mdash; re-import previously exported files
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="flex items-center justify-between bg-zinc-800/50 rounded-lg p-3 cursor-pointer hover:bg-zinc-800 transition-colors">
+              <div>
+                <p class="text-sm text-zinc-300 flex items-center gap-1.5">
+                  <i data-lucide="file-up" class="w-3.5 h-3.5 text-green-400"></i> Import CSV
+                </p>
+                <p class="text-[10px] text-zinc-500 mt-0.5">From Jira or exported CSV</p>
+              </div>
+              <span class="bg-green-600/20 text-green-400 text-xs font-mono px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                <i data-lucide="upload" class="w-3 h-3"></i> CSV
+              </span>
+              <input type="file" accept=".csv" onchange="importProjectFile(event, 'csv')" class="hidden">
+            </label>
+            <label class="flex items-center justify-between bg-zinc-800/50 rounded-lg p-3 cursor-pointer hover:bg-zinc-800 transition-colors">
+              <div>
+                <p class="text-sm text-zinc-300 flex items-center gap-1.5">
+                  <i data-lucide="file-up" class="w-3.5 h-3.5 text-blue-400"></i> Import JSON
+                </p>
+                <p class="text-[10px] text-zinc-500 mt-0.5">From Jira or exported JSON</p>
+              </div>
+              <span class="bg-blue-600/20 text-blue-400 text-xs font-mono px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                <i data-lucide="upload" class="w-3 h-3"></i> JSON
+              </span>
+              <input type="file" accept=".json" onchange="importProjectFile(event, 'json')" class="hidden">
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Danger Zone -->
       <div class="bg-zinc-900 border border-red-500/30 rounded-lg p-5">
         <h3 class="font-mono font-bold text-red-400 mb-3 flex items-center gap-2">
@@ -1584,21 +1671,21 @@ function renderSettings(proj) {
         </h3>
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-sm text-zinc-300">Export Project Data</p>
-            <p class="text-xs text-zinc-500">Download all project data as JSON</p>
+            <p class="text-sm text-zinc-300">Export Full App Data</p>
+            <p class="text-xs text-zinc-500">Download all projects &amp; settings as raw JSON</p>
           </div>
           <button onclick="exportData()"
             class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors">
-            Export JSON
+            Export All
           </button>
         </div>
         <div class="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
           <div>
-            <p class="text-sm text-zinc-300">Import Project Data</p>
-            <p class="text-xs text-zinc-500">Load data from a JSON export</p>
+            <p class="text-sm text-zinc-300">Import Full App Data</p>
+            <p class="text-xs text-zinc-500">Replace all data from a raw JSON export</p>
           </div>
           <label class="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
-            Import JSON
+            Import All
             <input type="file" accept=".json" onchange="importData(event)" class="hidden">
           </label>
         </div>
@@ -2010,6 +2097,293 @@ function importData(event) {
   reader.readAsText(file);
 }
 
+// ─── Jira-Compatible Export (CSV & JSON) with Round-Trip Support ─────────────
+
+// Reverse priority map: internal → Jira display name
+const PRIORITY_EXPORT_MAP = {
+  critical: 'Highest', high: 'High', medium: 'Medium', low: 'Low'
+};
+
+// Reverse type map: internal → Jira display name
+const TYPE_EXPORT_MAP = {
+  epic: 'Epic', feature: 'Feature', story: 'Story'
+};
+
+function escapeCSVField(val) {
+  const s = String(val ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function buildExportRows() {
+  const proj = getProject();
+  if (!proj) return [];
+  const cards = proj.cards || [];
+  // Build lookup maps
+  const cardById = {};
+  cards.forEach(c => { cardById[c.id] = c; });
+  // Resolve column name for status
+  const colById = {};
+  (proj.columns || []).forEach(col => { colById[col.id] = col.name; });
+
+  return cards.map(card => {
+    const parentCard = card.parentId ? cardById[card.parentId] : null;
+    // Status from column
+    let status = 'Backlog';
+    if (card.columnId && card.columnId !== 'backlog') {
+      status = colById[card.columnId] || card.columnId;
+    }
+    // Story points: strip trailing " SP"
+    let sp = card.storyPoints || card.estimatedTime || '';
+    sp = sp.replace(/\s*SP$/i, '').trim();
+    // Acceptance criteria from subtasks
+    const ac = (card.subtasks || []).map(s => (s.done ? '[x] ' : '[ ] ') + s.title).join('||');
+    // Dependencies: resolve IDs to keys/titles
+    const blockedBy = (card.dependencies || []).map(depId => {
+      const dep = cardById[depId];
+      return dep ? dep.id : depId;
+    }).join(';');
+    // Labels
+    const labels = (card.labels || []).join(';');
+
+    return {
+      issueType: TYPE_EXPORT_MAP[card.type] || 'Story',
+      issueId: card.id,
+      summary: card.title || '',
+      description: card.description || '',
+      priority: PRIORITY_EXPORT_MAP[card.priority] || 'Medium',
+      storyPoints: sp,
+      labels,
+      epicLink: parentCard ? parentCard.title : '',
+      assignee: card.assignee || '',
+      status,
+      acceptanceCriteria: ac,
+      blockedBy,
+      materials: card.materials || '',
+      dueDate: card.dueDate ? new Date(card.dueDate).toISOString().split('T')[0] : '',
+      createdAt: card.createdAt ? new Date(card.createdAt).toISOString().split('T')[0] : ''
+    };
+  });
+}
+
+function exportProjectCSV() {
+  const rows = buildExportRows();
+  if (rows.length === 0) { alert('No cards to export.'); return; }
+  const headers = [
+    'Issue Type', 'Issue ID', 'Summary', 'Description', 'Priority',
+    'Story Points', 'Labels', 'Epic Link', 'Assignee', 'Status',
+    'Acceptance Criteria', 'Blocked By', 'Materials', 'Due Date', 'Created'
+  ];
+  const csvLines = [headers.join(',')];
+  for (const r of rows) {
+    csvLines.push([
+      escapeCSVField(r.issueType),
+      escapeCSVField(r.issueId),
+      escapeCSVField(r.summary),
+      escapeCSVField(r.description),
+      escapeCSVField(r.priority),
+      escapeCSVField(r.storyPoints),
+      escapeCSVField(r.labels),
+      escapeCSVField(r.epicLink),
+      escapeCSVField(r.assignee),
+      escapeCSVField(r.status),
+      escapeCSVField(r.acceptanceCriteria),
+      escapeCSVField(r.blockedBy),
+      escapeCSVField(r.materials),
+      escapeCSVField(r.dueDate),
+      escapeCSVField(r.createdAt)
+    ].join(','));
+  }
+  const content = csvLines.join('\n');
+  const proj = getProject();
+  const filename = (proj?.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_') + '_export.csv';
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function exportProjectJSON() {
+  const proj = getProject();
+  if (!proj) return;
+  const cards = proj.cards || [];
+  if (cards.length === 0) { alert('No cards to export.'); return; }
+
+  // Build lookup maps
+  const cardById = {};
+  cards.forEach(c => { cardById[c.id] = c; });
+  const colById = {};
+  (proj.columns || []).forEach(col => { colById[col.id] = col.name; });
+
+  // Build hierarchical structure: epics → features → stories
+  const epics = cards.filter(c => c.type === 'epic');
+  const features = cards.filter(c => c.type === 'feature');
+  const stories = cards.filter(c => c.type === 'story' || !c.type);
+  const placed = new Set();
+
+  function resolveStatus(card) {
+    if (!card.columnId || card.columnId === 'backlog') return 'Backlog';
+    return colById[card.columnId] || card.columnId;
+  }
+
+  function storyToExport(s) {
+    const sp = (s.storyPoints || s.estimatedTime || '').replace(/\s*SP$/i, '').trim();
+    placed.add(s.id);
+    return {
+      id: s.id,
+      type: TYPE_EXPORT_MAP[s.type] || 'Story',
+      title: s.title,
+      description: s.description || '',
+      priority: (s.priority || 'medium').toLowerCase(),
+      story_points: sp ? (isNaN(Number(sp)) ? sp : Number(sp)) : '',
+      labels: s.labels || [],
+      assignee: s.assignee || '',
+      status: resolveStatus(s),
+      acceptance_criteria: (s.subtasks || []).map(st => (st.done ? '[x] ' : '[ ] ') + st.title),
+      blocked_by: (s.dependencies || []).map(depId => depId),
+      materials: s.materials || '',
+      due_date: s.dueDate ? new Date(s.dueDate).toISOString().split('T')[0] : '',
+      created_at: s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : ''
+    };
+  }
+
+  const exportEpics = [];
+
+  for (const epic of epics) {
+    placed.add(epic.id);
+    const epicFeatures = features.filter(f => f.parentId === epic.id);
+    const epicDirectStories = stories.filter(s => s.parentId === epic.id);
+
+    const exportFeatures = [];
+    for (const feat of epicFeatures) {
+      placed.add(feat.id);
+      const featStories = stories.filter(s => s.parentId === feat.id);
+      exportFeatures.push({
+        id: feat.id,
+        title: feat.title,
+        description: feat.description || '',
+        priority: (feat.priority || 'medium').toLowerCase(),
+        labels: feat.labels || [],
+        stories: featStories.map(storyToExport)
+      });
+    }
+
+    // Direct stories under epic (no feature parent) → wrap in implicit feature
+    if (epicDirectStories.length > 0) {
+      exportFeatures.push({
+        id: 'direct-' + epic.id,
+        title: epic.title + ' Tasks',
+        description: '',
+        priority: 'medium',
+        labels: [],
+        stories: epicDirectStories.map(storyToExport)
+      });
+    }
+
+    exportEpics.push({
+      id: epic.id,
+      title: epic.title,
+      description: epic.description || '',
+      priority: (epic.priority || 'medium').toLowerCase(),
+      labels: epic.labels || [],
+      features: exportFeatures
+    });
+  }
+
+  // Orphan features (no epic parent)
+  const orphanFeatures = features.filter(f => !placed.has(f.id));
+  if (orphanFeatures.length > 0) {
+    const orphanExportFeats = [];
+    for (const feat of orphanFeatures) {
+      placed.add(feat.id);
+      const featStories = stories.filter(s => s.parentId === feat.id);
+      orphanExportFeats.push({
+        id: feat.id,
+        title: feat.title,
+        description: feat.description || '',
+        priority: (feat.priority || 'medium').toLowerCase(),
+        labels: feat.labels || [],
+        stories: featStories.map(storyToExport)
+      });
+    }
+    exportEpics.push({
+      id: 'ungrouped-features',
+      title: 'Ungrouped Features',
+      description: 'Features without an epic parent',
+      priority: 'medium',
+      labels: [],
+      features: orphanExportFeats
+    });
+  }
+
+  // Orphan stories (no parent at all)
+  const orphanStories = stories.filter(s => !placed.has(s.id));
+  if (orphanStories.length > 0) {
+    exportEpics.push({
+      id: 'ungrouped-stories',
+      title: 'Ungrouped Stories',
+      description: 'Stories without a parent epic or feature',
+      priority: 'medium',
+      labels: [],
+      features: [{
+        id: 'ungrouped-stories-feature',
+        title: 'Tasks',
+        description: '',
+        priority: 'medium',
+        labels: [],
+        stories: orphanStories.map(storyToExport)
+      }]
+    });
+  }
+
+  const exportData = {
+    project: {
+      name: proj.name,
+      exported_at: new Date().toISOString(),
+      board_columns: (proj.columns || []).map(c => c.name)
+    },
+    labels: (proj.labels || []).map(l => ({ name: l.name, color: l.color })),
+    epics: exportEpics
+  };
+
+  const content = JSON.stringify(exportData, null, 2);
+  const filename = (proj.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_') + '_export.json';
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// Round-trip import: reads exported CSV/JSON and feeds into bulk import pipeline
+function importProjectFile(event, format) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    bulkImportState.format = format;
+    bulkImportState.raw = text;
+    const result = format === 'csv' ? parseBulkImportCSV(text) : parseBulkImportJSON(text);
+    bulkImportState.items = result.items;
+    bulkImportState.error = result.error;
+    bulkImportState.projectLabels = result.projectLabels || [];
+    modal = { type: 'bulk-import', data: {} };
+    // Pre-fill the textarea when modal renders
+    setTimeout(() => {
+      const textarea = document.getElementById('bulk-import-text');
+      if (textarea) textarea.value = text;
+    }, 50);
+    render();
+  };
+  reader.readAsText(file);
+  // Reset input so same file can be re-selected
+  event.target.value = '';
+}
+
 // ─── Bulk Import ────────────────────────────────────────────────────────────
 
 let bulkImportState = { items: [], format: 'csv', raw: '', error: '', projectLabels: [] };
@@ -2044,7 +2418,11 @@ const CSV_HEADER_MAP = {
   'acceptance criteria': 'acceptanceCriteria', 'acceptance_criteria': 'acceptanceCriteria',
   'sprint': 'sprint', 'status': 'status',
   'component': 'component', 'components': 'component',
-  'fix version': 'fixVersion', 'fix_version': 'fixVersion'
+  'fix version': 'fixVersion', 'fix_version': 'fixVersion',
+  'blocked by': 'blockedBy', 'blocked_by': 'blockedBy', 'blockedby': 'blockedBy',
+  'materials': 'materials',
+  'due date': 'dueDate', 'due_date': 'dueDate', 'duedate': 'dueDate',
+  'created': 'createdAt', 'created_at': 'createdAt', 'createdat': 'createdAt'
 };
 const ISSUE_TYPE_MAP = {
   'epic': 'epic',
@@ -2135,7 +2513,7 @@ function parseBulkImportCSV(text) {
     if (!parent && hasEpicLink && row.epicLink) {
       parent = row.epicLink;
     }
-    // Parse acceptance criteria into subtasks
+    // Parse acceptance criteria into subtasks (supports [x]/[ ] done markers from round-trip)
     let subtasks = [];
     if (hasAcceptanceCriteria && row.acceptanceCriteria) {
       subtasks = row.acceptanceCriteria
@@ -2143,7 +2521,17 @@ function parseBulkImportCSV(text) {
         .split('||')
         .map(line => line.replace(/^\s*[\*\-\u2022]\s*/, '').trim())
         .filter(Boolean)
-        .map(ac => ({ title: ac, done: false }));
+        .map(ac => {
+          const doneMatch = ac.match(/^\[(x| )\]\s*/i);
+          const done = doneMatch ? doneMatch[1].toLowerCase() === 'x' : false;
+          const title = doneMatch ? ac.slice(doneMatch[0].length) : ac;
+          return { title, done };
+        });
+    }
+    // Parse blocked_by dependencies (semicolon-separated IDs)
+    let blockedBy = [];
+    if (row.blockedBy) {
+      blockedBy = row.blockedBy.split(';').map(s => s.trim()).filter(Boolean);
     }
     const sp = row.storyPoints || '';
     items.push({
@@ -2157,8 +2545,9 @@ function parseBulkImportCSV(text) {
       assignee: row.assignee || '',
       parent,
       subtasks,
-      blockedBy: [],
-      sourceId: row.issueId || ''
+      blockedBy,
+      sourceId: row.issueId || '',
+      materials: row.materials || ''
     });
   }
   if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n'), projectLabels: [] };
@@ -2261,9 +2650,13 @@ function parseBulkImportJSON(text) {
                   storyPoints: story.story_points ? String(story.story_points) + ' SP' : '',
                   assignee: story.assignee || '',
                   parent: feature.title,
-                  subtasks: Array.isArray(story.acceptance_criteria) ? story.acceptance_criteria.map(ac => ({ title: ac, done: false })) : [],
+                  subtasks: Array.isArray(story.acceptance_criteria) ? story.acceptance_criteria.map(ac => {
+                    const m = String(ac).match(/^\[(x| )\]\s*/i);
+                    return { title: m ? String(ac).slice(m[0].length) : String(ac), done: m ? m[1].toLowerCase() === 'x' : false };
+                  }) : [],
                   blockedBy: Array.isArray(story.blocked_by) ? story.blocked_by : [],
-                  sourceId: story.id || ''
+                  sourceId: story.id || '',
+                  materials: story.materials || ''
                 });
               }
             }
@@ -2292,9 +2685,13 @@ function parseBulkImportJSON(text) {
             storyPoints: item.story_points ? String(item.story_points) + ' SP' : '',
             assignee: item.assignee || '',
             parent: parentTitle || '',
-            subtasks: Array.isArray(item.acceptance_criteria) ? item.acceptance_criteria.map(ac => ({ title: ac, done: false })) : [],
+            subtasks: Array.isArray(item.acceptance_criteria) ? item.acceptance_criteria.map(ac => {
+              const m = String(ac).match(/^\[(x| )\]\s*/i);
+              return { title: m ? String(ac).slice(m[0].length) : String(ac), done: m ? m[1].toLowerCase() === 'x' : false };
+            }) : [],
             blockedBy: Array.isArray(item.blocked_by) ? item.blocked_by : [],
-            sourceId: item.id || ''
+            sourceId: item.id || '',
+            materials: item.materials || ''
           });
           if (item.children && Array.isArray(item.children)) {
             flatten(item.children, item.title);
@@ -2397,7 +2794,7 @@ function executeBulkImport() {
       description: item.description,
       priority: item.priority,
       labels: item.labels,
-      materials: '',
+      materials: item.materials || '',
       estimatedTime,
       dueDate: '',
       subtasks: item.subtasks || [],
@@ -5180,6 +5577,13 @@ function attachRetroListeners() {
 }
 
 // ─── Keyboard Shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('click', (e) => {
+  const dd = document.getElementById('export-dropdown');
+  if (dd && !dd.classList.contains('hidden') && !e.target.closest('.relative')) {
+    dd.classList.add('hidden');
+  }
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && modal) { closeModal(); e.preventDefault(); }
   const inInput = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
