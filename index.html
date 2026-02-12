@@ -258,6 +258,7 @@ let searchQuery = '';
 let boardSettingsOpen = false;
 let depHighlight = null; // cardId to highlight in deps view
 let filterAssignee = '';
+let collapsedEpics = new Set(); // track collapsed epics in backlog view
 
 function getProject() {
   return state.projects.find(p => p.id === state.activeProjectId);
@@ -970,9 +971,27 @@ function renderCard(card, colId) {
   `;
 }
 
+function toggleEpicCollapse(epicId, event) {
+  if (event) event.stopPropagation();
+  if (collapsedEpics.has(epicId)) collapsedEpics.delete(epicId);
+  else collapsedEpics.add(epicId);
+  render();
+}
+
+function toggleAllEpics(collapse) {
+  const cards = getBacklogCards();
+  const epics = cards.filter(c => c.type === 'epic' && cards.some(ch => ch.parentId === c.id));
+  if (collapse) epics.forEach(e => collapsedEpics.add(e.id));
+  else collapsedEpics.clear();
+  render();
+}
+
 // ─── Backlog View ──────────────────────────────────────────────────────────────
 function renderBacklog(proj) {
   const cards = getBacklogCards();
+  const epicsWithChildren = cards.filter(c => c.type === 'epic' && cards.some(ch => ch.parentId === c.id));
+  const hasCollapsible = epicsWithChildren.length > 0;
+  const allCollapsed = hasCollapsible && epicsWithChildren.every(e => collapsedEpics.has(e.id));
   return `
     <div class="max-w-4xl mx-auto p-4 sm:p-6">
       <div class="flex items-center justify-between mb-4">
@@ -980,6 +999,14 @@ function renderBacklog(proj) {
           <i data-lucide="layers" class="w-5 h-5 text-amber-500"></i>
           <h2 class="font-mono font-bold text-lg text-zinc-100">Backlog</h2>
           <span class="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-400 rounded font-mono">${cards.length}</span>
+          ${hasCollapsible ? `
+            <button onclick="toggleAllEpics(${allCollapsed ? 'false' : 'true'})"
+              class="ml-2 text-xs px-2 py-0.5 rounded font-mono text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 transition-colors flex items-center gap-1"
+              title="${allCollapsed ? 'Expand all epics' : 'Collapse all epics'}">
+              <i data-lucide="${allCollapsed ? 'chevrons-down-up' : 'chevrons-up-down'}" class="w-3 h-3"></i>
+              ${allCollapsed ? 'Expand All' : 'Collapse All'}
+            </button>
+          ` : ''}
         </div>
         <div class="flex items-center gap-2">
           <button onclick="openBulkImportModal()"
@@ -1034,7 +1061,20 @@ function renderBacklog(proj) {
           for (const c of cards) {
             if (!placed.has(c.id)) { ordered.push(c); placed.add(c.id); }
           }
-          return ordered.map(card => {
+          // Build a set of all descendant IDs for each collapsed epic
+          const hiddenIds = new Set();
+          for (const epic of epics) {
+            if (collapsedEpics.has(epic.id)) {
+              const epicChildren = cards.filter(c => c.parentId === epic.id);
+              for (const child of epicChildren) {
+                hiddenIds.add(child.id);
+                const grandchildren = cards.filter(c => c.parentId === child.id);
+                for (const gc of grandchildren) hiddenIds.add(gc.id);
+              }
+            }
+          }
+
+          return ordered.filter(c => !hiddenIds.has(c.id)).map(card => {
             const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
             const overdue = isOverdue(card);
             const subtasksDone = (card.subtasks || []).filter(s => s.done).length;
@@ -1046,6 +1086,9 @@ function renderBacklog(proj) {
             const parent = card.parentId ? cards.find(c => c.id === card.parentId) : null;
             const grandparent = parent?.parentId ? cards.find(c => c.id === parent.parentId) : null;
             const indent = grandparent ? 'ml-10' : (parent ? 'ml-5' : '');
+            // Collapse toggle for epics with children
+            const epicChildCount = card.type === 'epic' ? cards.filter(c => c.parentId === card.id).length : 0;
+            const isCollapsed = collapsedEpics.has(card.id);
             return `<div class="${indent}">` + `
             <div class="bg-zinc-900 border ${blocked ? 'border-red-500/40' : card.type === 'epic' ? 'border-amber-500/30' : card.type === 'feature' ? 'border-purple-500/20' : 'border-zinc-700'} rounded-lg p-4 flex items-start gap-4
               hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 cursor-pointer group relative"
@@ -1061,11 +1104,20 @@ function renderBacklog(proj) {
                 </div>
               ` : ''}
 
+              ${epicChildCount > 0 ? `
+                <button onclick="toggleEpicCollapse('${card.id}', event)"
+                  class="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-zinc-400 hover:text-amber-400 hover:bg-zinc-800 transition-colors mt-0.5"
+                  title="${isCollapsed ? 'Expand' : 'Collapse'} ${epicChildCount} items">
+                  <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
+
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                   ${parent ? '<i data-lucide="corner-down-right" class="w-3 h-3 text-zinc-600 flex-shrink-0"></i>' : ''}
                   ${cardType ? `<span class="text-xs px-1.5 py-0.5 rounded font-mono ${cardType.bg} ${cardType.color} flex items-center gap-1 flex-shrink-0"><i data-lucide="${cardType.icon}" class="w-3 h-3"></i>${cardType.label}</span>` : ''}
                   <p class="font-medium text-zinc-100 truncate">${escHtml(card.title)}</p>
+                  ${epicChildCount > 0 && isCollapsed ? `<span class="text-xs px-1.5 py-0.5 rounded font-mono bg-zinc-800 text-zinc-500 flex-shrink-0">${epicChildCount} items</span>` : ''}
                 </div>
                 ${card.description ? `<p class="text-xs text-zinc-500 line-clamp-2 mb-2">${escHtml(card.description)}</p>` : ''}
                 <div class="flex items-center gap-2 flex-wrap">
