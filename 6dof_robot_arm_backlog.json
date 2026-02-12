@@ -1,0 +1,1549 @@
+{
+  "project": {
+    "key": "ROBO",
+    "name": "6-DoF Robot Arm",
+    "description": "3D-printed 6-DoF robot arm with ESP32 + SimpleFOC motor control (Phase 1) and Raspberry Pi vision-based autonomous tracking (Phase 2).",
+    "lead": "",
+    "board_type": "scrum"
+  },
+  "labels": [
+    {
+      "name": "phase-1-mvp",
+      "color": "#1A73E8"
+    },
+    {
+      "name": "phase-2-vision",
+      "color": "#E8710A"
+    },
+    {
+      "name": "mechanical",
+      "color": "#607D8B"
+    },
+    {
+      "name": "electronics",
+      "color": "#FF9800"
+    },
+    {
+      "name": "firmware",
+      "color": "#4CAF50"
+    },
+    {
+      "name": "software",
+      "color": "#9C27B0"
+    },
+    {
+      "name": "vision",
+      "color": "#00BCD4"
+    },
+    {
+      "name": "testing",
+      "color": "#F44336"
+    },
+    {
+      "name": "documentation",
+      "color": "#795548"
+    }
+  ],
+  "sprints": [
+    {
+      "id": "S1",
+      "name": "Sprint 1 \u2014 CAD & Joint Design",
+      "goal": "Complete parametric CAD model of all 6 joints, base plate, and bearing housings",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S2",
+      "name": "Sprint 2 \u2014 Electronics & First Motor",
+      "goal": "Power system assembled, drivers wired, encoders mounted, single motor spinning open-loop, parts printed",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S3",
+      "name": "Sprint 3 \u2014 Closed-Loop Single Motor",
+      "goal": "PID-tuned closed-loop angle control on one motor, current sensing, wiring harness complete",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S4",
+      "name": "Sprint 4 \u2014 Multi-Motor + Serial CLI",
+      "goal": "All 6 motors closed-loop at \u22651kHz, joint limits, E-stop, serial command interface",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S5",
+      "name": "Sprint 5 \u2014 Web UI & Homing",
+      "goal": "ESP32 web dashboard with sliders, homing sequence, status monitoring",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S6",
+      "name": "Sprint 6 \u2014 Teach Mode & Integration Test",
+      "goal": "Record/replay poses, Bluetooth gamepad, full integration test checklist passed",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S7",
+      "name": "Sprint 7 \u2014 MVP Ship",
+      "goal": "Payload tested, GitHub repo published with full docs, MVP demo video",
+      "duration_weeks": 2,
+      "phase": "Phase 1"
+    },
+    {
+      "id": "S8",
+      "name": "Sprint 8 \u2014 RPi + Camera Bringup",
+      "goal": "UART protocol between RPi\u2194ESP32, RPi OS image, ArduCam streaming 200 FPS",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    },
+    {
+      "id": "S9",
+      "name": "Sprint 9 \u2014 Vision Pipeline & FK",
+      "goal": "Camera calibrated, HSV color tracking at 100+ FPS, DH parameters validated, camera mount printed",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    },
+    {
+      "id": "S10",
+      "name": "Sprint 10 \u2014 IK Solver & Trajectory",
+      "goal": "Full 6-DoF IK solver under 1ms, 3D position estimation, joint-space trajectory interpolation",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    },
+    {
+      "id": "S11",
+      "name": "Sprint 11 \u2014 Cartesian Paths & Workspace",
+      "goal": "Straight-line Cartesian paths, singularity handling, reachable workspace visualization",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    },
+    {
+      "id": "S12",
+      "name": "Sprint 12 \u2014 Real-Time Tracking",
+      "goal": "30Hz vision\u2192IK\u2192command loop with Kalman filter, self-collision checking",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    },
+    {
+      "id": "S13",
+      "name": "Sprint 13 \u2014 Autonomous Demo",
+      "goal": "Pick-and-place demo at \u226570% success, dashboard v2 with live camera overlay",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    },
+    {
+      "id": "S14",
+      "name": "Sprint 14 \u2014 Metrics & Documentation",
+      "goal": "Performance logging, analysis notebook, demo video, full system documentation",
+      "duration_weeks": 2,
+      "phase": "Phase 2"
+    }
+  ],
+  "epics": [
+    {
+      "id": "E1",
+      "key": "ROBO-E1",
+      "title": "Mechanical Design & 3D Printing",
+      "phase": "Phase 1",
+      "labels": [
+        "phase-1-mvp",
+        "mechanical"
+      ],
+      "description": "Design, print, and assemble all structural components of the 6-DoF arm using BambuLab printer.",
+      "features": [
+        {
+          "id": "F1.1",
+          "title": "Joint & Link Design",
+          "stories": [
+            {
+              "id": "S-001",
+              "key": "ROBO-1",
+              "type": "story",
+              "title": "Parametric CAD model of all 6 joints",
+              "description": "As an engineer, I want a parametric CAD model of all 6 joints so that I can iterate on dimensions quickly.",
+              "priority": "must_have",
+              "story_points": 8,
+              "sprint": "S1",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "mechanical"
+              ],
+              "acceptance_criteria": [
+                "Full 6-DoF assembly in Fusion 360 / SolidWorks",
+                "Each joint parameterized (length, bore, offset)",
+                "BOM exported"
+              ],
+              "blocked_by": []
+            },
+            {
+              "id": "S-002",
+              "key": "ROBO-2",
+              "type": "story",
+              "title": "Bearing housings and shaft couplers for iPower GM4108",
+              "description": "As an engineer, I want bearing housings and shaft couplers designed for iPower GM4108 motors so that shafts are rigid and concentric.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S1",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "mechanical"
+              ],
+              "acceptance_criteria": [
+                "Shaft coupler fits 8mm motor shaft",
+                "Bearing seat tolerances \u00b10.1mm",
+                "Test-fit print verified"
+              ],
+              "blocked_by": [
+                "S-001"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F1.2",
+          "title": "Base & End-Effector",
+          "stories": [
+            {
+              "id": "S-003",
+              "key": "ROBO-3",
+              "type": "story",
+              "title": "Stable base plate with mounting holes",
+              "description": "As an engineer, I want a stable base plate with mounting holes so the arm doesn't tip during operation.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S1",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "mechanical"
+              ],
+              "acceptance_criteria": [
+                "Base footprint >= 150x150mm",
+                "M4 mounting holes on 100mm grid",
+                "Weighted or bolt-down option"
+              ],
+              "blocked_by": [
+                "S-001"
+              ]
+            },
+            {
+              "id": "S-004",
+              "key": "ROBO-4",
+              "type": "story",
+              "title": "Modular end-effector mount",
+              "description": "As an engineer, I want a modular end-effector mount so I can swap grippers or tool heads later.",
+              "priority": "should_have",
+              "story_points": 3,
+              "sprint": "S2",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "mechanical"
+              ],
+              "acceptance_criteria": [
+                "Standard dovetail or bolt pattern",
+                "Quick-release mechanism",
+                "<= 50g added mass"
+              ],
+              "blocked_by": [
+                "S-001"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F1.3",
+          "title": "Print & Assembly",
+          "stories": [
+            {
+              "id": "S-005",
+              "key": "ROBO-5",
+              "type": "story",
+              "title": "Optimized print orientation for all parts",
+              "description": "As an engineer, I want all parts printed on BambuLab with optimized orientation so that layer lines don't weaken critical joints.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S2",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "mechanical"
+              ],
+              "acceptance_criteria": [
+                "Print profiles documented (PLA/PETG, infill%, supports)",
+                "Critical joints printed flat or with inserts",
+                "Total print time < 30h"
+              ],
+              "blocked_by": [
+                "S-001"
+              ]
+            },
+            {
+              "id": "S-006",
+              "key": "ROBO-6",
+              "type": "story",
+              "title": "Assembly guide with hardware BOM",
+              "description": "As an engineer, I want an assembly guide with hardware BOM so that anyone can reproduce the build.",
+              "priority": "should_have",
+              "story_points": 3,
+              "sprint": "S3",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "mechanical",
+                "documentation"
+              ],
+              "acceptance_criteria": [
+                "Step-by-step photo assembly guide",
+                "BOM with supplier links",
+                "Fastener torque specs"
+              ],
+              "blocked_by": [
+                "S-005"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E2",
+      "key": "ROBO-E2",
+      "title": "Electronics & Wiring",
+      "phase": "Phase 1",
+      "labels": [
+        "phase-1-mvp",
+        "electronics"
+      ],
+      "description": "Design and assemble the power system, motor drivers, encoders, and wiring harness.",
+      "features": [
+        {
+          "id": "F2.1",
+          "title": "Power System",
+          "stories": [
+            {
+              "id": "S-007",
+              "key": "ROBO-7",
+              "type": "story",
+              "title": "Power distribution board for all motors + ESP32",
+              "description": "As an engineer, I want a power distribution board that supplies 12V to all 6 motors and 3.3V to the ESP32 so that the system runs from a single PSU.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S2",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "electronics"
+              ],
+              "acceptance_criteria": [
+                "Single 12V 10A+ PSU input",
+                "Per-motor fusing or polyfuse",
+                "3.3V buck converter for ESP32",
+                "Reverse polarity protection"
+              ],
+              "blocked_by": []
+            },
+            {
+              "id": "S-008",
+              "key": "ROBO-8",
+              "type": "story",
+              "title": "Current sensing on Joint 1 and Joint 2",
+              "description": "As an engineer, I want current sensing on at least Joint 1 and Joint 2 so I can detect stalls and overloads.",
+              "priority": "should_have",
+              "story_points": 5,
+              "sprint": "S3",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "electronics"
+              ],
+              "acceptance_criteria": [
+                "INA219 or ACS712 per channel",
+                "I2C readable from ESP32",
+                "Alert threshold configurable"
+              ],
+              "blocked_by": [
+                "S-007"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2.2",
+          "title": "Motor Driver Wiring",
+          "stories": [
+            {
+              "id": "S-009",
+              "key": "ROBO-9",
+              "type": "story",
+              "title": "SimpleFOC-compatible drivers for all 6 motors",
+              "description": "As an engineer, I want each motor connected to a SimpleFOC-compatible driver (e.g., SimpleFOC Shield or custom DRV8302) so that FOC runs at >=10kHz PWM.",
+              "priority": "must_have",
+              "story_points": 8,
+              "sprint": "S2",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "electronics"
+              ],
+              "acceptance_criteria": [
+                "6 driver boards wired and tested",
+                "PWM frequency verified >= 10kHz",
+                "Heat sinks on FETs if needed"
+              ],
+              "blocked_by": [
+                "S-007"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2.3",
+          "title": "Encoder / Position Feedback",
+          "stories": [
+            {
+              "id": "S-010",
+              "key": "ROBO-10",
+              "type": "story",
+              "title": "Magnetic encoders on each joint",
+              "description": "As an engineer, I want magnetic encoders (AS5048A/AS5600) on each joint so that SimpleFOC has closed-loop position feedback.",
+              "priority": "must_have",
+              "story_points": 8,
+              "sprint": "S2",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "electronics"
+              ],
+              "acceptance_criteria": [
+                "6x encoders mounted and aligned",
+                "SPI or I2C bus verified (no address conflicts)",
+                "Resolution >= 14-bit"
+              ],
+              "blocked_by": [
+                "S-001"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2.4",
+          "title": "Wiring Harness",
+          "stories": [
+            {
+              "id": "S-011",
+              "key": "ROBO-11",
+              "type": "story",
+              "title": "Cable routing plan with strain relief",
+              "description": "As an engineer, I want a cable routing plan with strain relief so that wires don't snag or fatigue during arm motion.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S3",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "electronics"
+              ],
+              "acceptance_criteria": [
+                "Cable channels in CAD",
+                "JST connectors for quick disconnect",
+                "Flex-rated wire for moving joints"
+              ],
+              "blocked_by": [
+                "S-005",
+                "S-009"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E3",
+      "key": "ROBO-E3",
+      "title": "Motor Control (SimpleFOC + ESP32)",
+      "phase": "Phase 1",
+      "labels": [
+        "phase-1-mvp",
+        "firmware"
+      ],
+      "description": "Bring up SimpleFOC on ESP32: single motor, multi-motor, PID tuning, safety, and homing.",
+      "features": [
+        {
+          "id": "F3.1",
+          "title": "Single Motor Bringup",
+          "stories": [
+            {
+              "id": "S-012",
+              "key": "ROBO-12",
+              "type": "story",
+              "title": "Open-loop voltage mode on single motor",
+              "description": "As an engineer, I want to spin a single iPower motor in open-loop voltage mode via SimpleFOC so that I verify driver + encoder wiring.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S2",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Motor spins smoothly in open-loop",
+                "No cogging or skipping",
+                "Current draw < 1A at no-load"
+              ],
+              "blocked_by": [
+                "S-009",
+                "S-010"
+              ]
+            },
+            {
+              "id": "S-013",
+              "key": "ROBO-13",
+              "type": "story",
+              "title": "Closed-loop angle control with PID tuning",
+              "description": "As an engineer, I want closed-loop angle control on a single motor with PID tuning so that I can hold a setpoint within \u00b10.5 degrees.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S3",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Angle mode with sensor feedback",
+                "PID gains documented",
+                "Step response < 200ms settle time",
+                "Steady-state error < 0.5 degrees"
+              ],
+              "blocked_by": [
+                "S-012"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3.2",
+          "title": "Multi-Motor Control",
+          "stories": [
+            {
+              "id": "S-014",
+              "key": "ROBO-14",
+              "type": "story",
+              "title": "6 motors closed-loop simultaneously at >= 1kHz",
+              "description": "As an engineer, I want all 6 motors running closed-loop simultaneously on a single ESP32 so that the control loop stays above 1kHz.",
+              "priority": "must_have",
+              "story_points": 13,
+              "sprint": "S4",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "6 motor instances initialized",
+                "Loop frequency >= 1kHz measured",
+                "No I2C/SPI bus contention",
+                "If needed, dual-ESP32 with CAN bus"
+              ],
+              "blocked_by": [
+                "S-013"
+              ]
+            },
+            {
+              "id": "S-015",
+              "key": "ROBO-15",
+              "type": "story",
+              "title": "Software joint limits (min/max angle)",
+              "description": "As an engineer, I want software joint limits (min/max angle per joint) so the arm can't self-collide or over-extend.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S4",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Configurable min/max per joint in code",
+                "Motor stops smoothly at limit",
+                "Limits survive reboot (stored in NVS)"
+              ],
+              "blocked_by": [
+                "S-014"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3.3",
+          "title": "Safety & Homing",
+          "stories": [
+            {
+              "id": "S-016",
+              "key": "ROBO-16",
+              "type": "story",
+              "title": "Homing sequence with limit switches or index pulses",
+              "description": "As an engineer, I want a homing sequence using limit switches or index pulses so that absolute position is known after power-on.",
+              "priority": "should_have",
+              "story_points": 5,
+              "sprint": "S5",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Each joint homes to a known zero",
+                "Homing speed is slow and safe",
+                "Status LED indicates homing complete"
+              ],
+              "blocked_by": [
+                "S-014"
+              ]
+            },
+            {
+              "id": "S-017",
+              "key": "ROBO-17",
+              "type": "story",
+              "title": "Emergency stop (hardware button + software watchdog)",
+              "description": "As an engineer, I want an emergency stop (hardware button + software watchdog) so the arm can be killed instantly.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S4",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware",
+                "electronics"
+              ],
+              "acceptance_criteria": [
+                "Physical E-stop button cuts motor power",
+                "Software watchdog triggers if loop stalls > 50ms",
+                "Watchdog logs fault reason to serial"
+              ],
+              "blocked_by": [
+                "S-014"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E4",
+      "key": "ROBO-E4",
+      "title": "Manual Joint Setpoint Interface",
+      "phase": "Phase 1",
+      "labels": [
+        "phase-1-mvp",
+        "firmware",
+        "software"
+      ],
+      "description": "User-facing interfaces for manual joint control: serial CLI, web dashboard, and gamepad.",
+      "features": [
+        {
+          "id": "F4.1",
+          "title": "Serial CLI",
+          "stories": [
+            {
+              "id": "S-018",
+              "key": "ROBO-18",
+              "type": "story",
+              "title": "Serial command interface for joint angles",
+              "description": "As a user, I want to send target angles via serial commands (e.g., 'J1 45.0') so I can control each joint from a terminal.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S4",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Parse 'Jn <angle>' commands",
+                "Respond with current position",
+                "Handle bad input gracefully"
+              ],
+              "blocked_by": [
+                "S-014"
+              ]
+            },
+            {
+              "id": "S-019",
+              "key": "ROBO-19",
+              "type": "story",
+              "title": "STATUS command for all joint angles and currents",
+              "description": "As a user, I want a 'STATUS' command that prints all 6 joint angles and motor currents so I can monitor the arm state.",
+              "priority": "should_have",
+              "story_points": 2,
+              "sprint": "S5",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Formatted table output",
+                "Updates at <= 100ms if in stream mode",
+                "Shows fault flags"
+              ],
+              "blocked_by": [
+                "S-018"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4.2",
+          "title": "Web Dashboard",
+          "stories": [
+            {
+              "id": "S-020",
+              "key": "ROBO-20",
+              "type": "story",
+              "title": "ESP32-hosted web UI with 6 sliders",
+              "description": "As a user, I want a simple web UI hosted on the ESP32 (WebSocket) with 6 sliders so I can move joints without a terminal.",
+              "priority": "should_have",
+              "story_points": 8,
+              "sprint": "S5",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "ESP32 serves HTML page via WiFi AP",
+                "6 sliders with degree labels",
+                "Real-time position feedback on UI",
+                "Latency < 50ms"
+              ],
+              "blocked_by": [
+                "S-018"
+              ]
+            },
+            {
+              "id": "S-021",
+              "key": "ROBO-21",
+              "type": "story",
+              "title": "Save and replay joint poses (teach mode)",
+              "description": "As a user, I want to save and replay joint poses (teach mode) so I can record a sequence and play it back.",
+              "priority": "could_have",
+              "story_points": 5,
+              "sprint": "S6",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "'Record Pose' button stores 6 angles",
+                "'Play Sequence' replays in order",
+                "Adjustable playback speed",
+                "Stored in ESP32 SPIFFS"
+              ],
+              "blocked_by": [
+                "S-020"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4.3",
+          "title": "Gamepad Input",
+          "stories": [
+            {
+              "id": "S-022",
+              "key": "ROBO-22",
+              "type": "story",
+              "title": "Bluetooth gamepad control for joint jogging",
+              "description": "As a user, I want to control the arm with a Bluetooth gamepad so I can jog joints intuitively.",
+              "priority": "could_have",
+              "story_points": 5,
+              "sprint": "S6",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "ESP32 BLE pairs with standard gamepad",
+                "Stick axes map to joint velocity",
+                "Deadzone and sensitivity configurable"
+              ],
+              "blocked_by": [
+                "S-014"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E5",
+      "key": "ROBO-E5",
+      "title": "MVP Integration & Testing",
+      "phase": "Phase 1",
+      "labels": [
+        "phase-1-mvp",
+        "testing"
+      ],
+      "description": "End-to-end integration testing, payload characterization, and documentation for MVP release.",
+      "features": [
+        {
+          "id": "F5.1",
+          "title": "Full Assembly Test",
+          "stories": [
+            {
+              "id": "S-023",
+              "key": "ROBO-23",
+              "type": "story",
+              "title": "Full integration test checklist",
+              "description": "As an engineer, I want a full integration test checklist so I can verify the assembled arm meets MVP criteria.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S6",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "testing"
+              ],
+              "acceptance_criteria": [
+                "All 6 joints move to commanded angles",
+                "Repeatability < 1 degree over 10 cycles",
+                "No overheating after 30 min",
+                "E-stop verified"
+              ],
+              "blocked_by": [
+                "S-014",
+                "S-018"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5.2",
+          "title": "Payload Test",
+          "stories": [
+            {
+              "id": "S-024",
+              "key": "ROBO-24",
+              "type": "story",
+              "title": "Max payload measurement at various extensions",
+              "description": "As an engineer, I want to measure the max payload at full extension so I can spec the arm for real tasks.",
+              "priority": "should_have",
+              "story_points": 3,
+              "sprint": "S7",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "testing"
+              ],
+              "acceptance_criteria": [
+                "Payload tested at 100%, 75%, 50% extension",
+                "Motor current vs. load curve plotted",
+                "Max safe payload documented"
+              ],
+              "blocked_by": [
+                "S-023"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5.3",
+          "title": "Documentation",
+          "stories": [
+            {
+              "id": "S-025",
+              "key": "ROBO-25",
+              "type": "story",
+              "title": "GitHub repo with wiring diagrams, CAD, firmware, and setup guide",
+              "description": "As a contributor, I want a GitHub repo with wiring diagrams, CAD files, firmware, and setup instructions so others can replicate the build.",
+              "priority": "should_have",
+              "story_points": 5,
+              "sprint": "S7",
+              "status": "backlog",
+              "labels": [
+                "phase-1-mvp",
+                "documentation"
+              ],
+              "acceptance_criteria": [
+                "README with overview and photos",
+                "/cad, /firmware, /electronics folders",
+                "Flashing instructions for ESP32",
+                "License file (MIT/Apache)"
+              ],
+              "blocked_by": [
+                "S-023"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E6",
+      "key": "ROBO-E6",
+      "title": "Raspberry Pi Integration",
+      "phase": "Phase 2",
+      "labels": [
+        "phase-2-vision",
+        "software"
+      ],
+      "description": "Establish reliable high-speed communication between Raspberry Pi and ESP32, and set up RPi environment.",
+      "features": [
+        {
+          "id": "F6.1",
+          "title": "RPi <-> ESP32 Comms",
+          "stories": [
+            {
+              "id": "S-026",
+              "key": "ROBO-26",
+              "type": "story",
+              "title": "Serial protocol for >= 100Hz joint commands",
+              "description": "As an engineer, I want a serial (UART) or USB protocol between RPi and ESP32 so the Pi can send joint commands at >= 100Hz.",
+              "priority": "must_have",
+              "story_points": 8,
+              "sprint": "S8",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "firmware",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Packet format defined (header, 6x float32, checksum)",
+                "Roundtrip latency < 5ms",
+                "Error recovery on dropped packets"
+              ],
+              "blocked_by": [
+                "S-018"
+              ]
+            },
+            {
+              "id": "S-027",
+              "key": "ROBO-27",
+              "type": "story",
+              "title": "Joint state streaming from ESP32 to RPi",
+              "description": "As an engineer, I want the ESP32 to stream joint states back to the RPi so the IK solver has real-time feedback.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S8",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "firmware"
+              ],
+              "acceptance_criteria": [
+                "Joint angles + velocities at 100Hz",
+                "Timestamps synced",
+                "Buffering handles jitter"
+              ],
+              "blocked_by": [
+                "S-026"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F6.2",
+          "title": "RPi Setup & OS",
+          "stories": [
+            {
+              "id": "S-028",
+              "key": "ROBO-28",
+              "type": "story",
+              "title": "Reproducible RPi image with all dependencies",
+              "description": "As an engineer, I want a reproducible RPi image (Raspberry Pi OS Lite + deps) so any team member can flash and run.",
+              "priority": "should_have",
+              "story_points": 3,
+              "sprint": "S8",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Ansible playbook or shell script",
+                "Python 3.11+, OpenCV, NumPy pre-installed",
+                "Auto-start service for arm controller"
+              ],
+              "blocked_by": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E7",
+      "key": "ROBO-E7",
+      "title": "Camera & Vision System",
+      "phase": "Phase 2",
+      "labels": [
+        "phase-2-vision",
+        "vision"
+      ],
+      "description": "Set up high-speed camera, calibrate, implement color tracking, and estimate 3D target position.",
+      "features": [
+        {
+          "id": "F7.1",
+          "title": "Camera Setup",
+          "stories": [
+            {
+              "id": "S-029",
+              "key": "ROBO-29",
+              "type": "story",
+              "title": "ArduCam streaming at 200 FPS",
+              "description": "As an engineer, I want the ArduCam configured to stream 200 FPS at a usable resolution (>= 320x240) so the vision pipeline has fast frames.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S8",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "vision"
+              ],
+              "acceptance_criteria": [
+                "200 FPS verified with timestamp delta",
+                "Resolution >= 320x240",
+                "Exposure and gain tunable",
+                "CSI or USB3 connection to RPi"
+              ],
+              "blocked_by": [
+                "S-028"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F7.2",
+          "title": "Camera Calibration",
+          "stories": [
+            {
+              "id": "S-030",
+              "key": "ROBO-30",
+              "type": "story",
+              "title": "Intrinsic camera calibration (checkerboard)",
+              "description": "As an engineer, I want intrinsic camera calibration (checkerboard method) so pixel coordinates map accurately to world coordinates.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S9",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "vision"
+              ],
+              "acceptance_criteria": [
+                "Calibration matrix and distortion coefficients saved",
+                "Reprojection error < 0.5px",
+                "Calibration script in repo"
+              ],
+              "blocked_by": [
+                "S-029"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F7.3",
+          "title": "Color Tracking",
+          "stories": [
+            {
+              "id": "S-031",
+              "key": "ROBO-31",
+              "type": "story",
+              "title": "Real-time HSV color-based object detection at >= 100 FPS",
+              "description": "As a user, I want real-time color-based object detection (HSV thresholding) so the arm can track a colored ball at >= 100 FPS.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S9",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "vision"
+              ],
+              "acceptance_criteria": [
+                "HSV range configurable via UI or config file",
+                "Centroid + bounding box output",
+                "Handles partial occlusion",
+                "Processing >= 100 FPS on RPi"
+              ],
+              "blocked_by": [
+                "S-030"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F7.4",
+          "title": "3D Position Estimation",
+          "stories": [
+            {
+              "id": "S-032",
+              "key": "ROBO-32",
+              "type": "story",
+              "title": "Mono 3D position estimation from known object size",
+              "description": "As an engineer, I want to estimate the 3D position of the tracked object from a single camera using known object size so the IK solver gets XYZ targets.",
+              "priority": "must_have",
+              "story_points": 8,
+              "sprint": "S10",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "vision"
+              ],
+              "acceptance_criteria": [
+                "Mono depth estimation from known object diameter",
+                "Output: (X, Y, Z) in arm base frame",
+                "Accuracy <= 10mm at 300mm range",
+                "Hand-eye calibration completed"
+              ],
+              "blocked_by": [
+                "S-031"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F7.5",
+          "title": "Camera Mount",
+          "stories": [
+            {
+              "id": "S-033",
+              "key": "ROBO-33",
+              "type": "story",
+              "title": "3D-printed camera mount with known transform to arm base",
+              "description": "As an engineer, I want a 3D-printed camera mount with known transform to the arm base so hand-eye calibration is repeatable.",
+              "priority": "should_have",
+              "story_points": 3,
+              "sprint": "S9",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "mechanical"
+              ],
+              "acceptance_criteria": [
+                "Rigid mount, no vibration",
+                "Known (X, Y, Z, R, P, Y) offset to base",
+                "Eye-to-hand or eye-in-hand config documented"
+              ],
+              "blocked_by": [
+                "S-029"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E8",
+      "key": "ROBO-E8",
+      "title": "Inverse Kinematics Engine",
+      "phase": "Phase 2",
+      "labels": [
+        "phase-2-vision",
+        "software"
+      ],
+      "description": "Implement forward kinematics, IK solver, and workspace analysis for the 6-DoF arm.",
+      "features": [
+        {
+          "id": "F8.1",
+          "title": "DH Parameters & FK",
+          "stories": [
+            {
+              "id": "S-034",
+              "key": "ROBO-34",
+              "type": "story",
+              "title": "Forward kinematics validated against CAD model",
+              "description": "As an engineer, I want forward kinematics (DH parameter table) validated against the CAD model so FK matches physical geometry within 1mm.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S9",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "DH table for all 6 joints documented",
+                "FK output vs. CAD measurement < 1mm error",
+                "Python FK function unit-tested"
+              ],
+              "blocked_by": [
+                "S-025"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F8.2",
+          "title": "IK Solver",
+          "stories": [
+            {
+              "id": "S-035",
+              "key": "ROBO-35",
+              "type": "story",
+              "title": "6-DoF IK solver under 1ms solve time",
+              "description": "As an engineer, I want an analytical or numerical IK solver that computes joint angles for a target (X, Y, Z, Roll, Pitch, Yaw) in < 1ms.",
+              "priority": "must_have",
+              "story_points": 13,
+              "sprint": "S10",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Solves for full 6-DoF pose",
+                "Handles multiple solutions (elbow up/down)",
+                "Returns closest solution to current pose",
+                "Solve time < 1ms on RPi"
+              ],
+              "blocked_by": [
+                "S-034"
+              ]
+            },
+            {
+              "id": "S-036",
+              "key": "ROBO-36",
+              "type": "story",
+              "title": "IK solver rejects unreachable targets gracefully",
+              "description": "As an engineer, I want the IK solver to reject unreachable targets gracefully so the arm doesn't attempt impossible poses.",
+              "priority": "must_have",
+              "story_points": 3,
+              "sprint": "S10",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Workspace boundary check before solve",
+                "Returns error code for out-of-reach",
+                "Suggests nearest reachable point"
+              ],
+              "blocked_by": [
+                "S-035"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F8.3",
+          "title": "Workspace Analysis",
+          "stories": [
+            {
+              "id": "S-037",
+              "key": "ROBO-37",
+              "type": "story",
+              "title": "3D visualization of reachable workspace",
+              "description": "As an engineer, I want a visualization of the arm's reachable workspace so I can position objects within range.",
+              "priority": "could_have",
+              "story_points": 5,
+              "sprint": "S11",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "3D point cloud of reachable positions",
+                "Matplotlib or web-based visualization",
+                "Color-coded by manipulability index"
+              ],
+              "blocked_by": [
+                "S-034"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E9",
+      "key": "ROBO-E9",
+      "title": "Path Planning",
+      "phase": "Phase 2",
+      "labels": [
+        "phase-2-vision",
+        "software"
+      ],
+      "description": "Trajectory interpolation in joint and Cartesian space, collision avoidance, and real-time tracking loop.",
+      "features": [
+        {
+          "id": "F9.1",
+          "title": "Joint-Space Interpolation",
+          "stories": [
+            {
+              "id": "S-038",
+              "key": "ROBO-38",
+              "type": "story",
+              "title": "Trapezoidal velocity profile interpolation",
+              "description": "As an engineer, I want trapezoidal velocity profile interpolation in joint space so movements are smooth and respect velocity limits.",
+              "priority": "must_have",
+              "story_points": 5,
+              "sprint": "S10",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Configurable max velocity and acceleration per joint",
+                "S-curve or trapezoidal profile",
+                "Waypoint queue with blending"
+              ],
+              "blocked_by": [
+                "S-035"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F9.2",
+          "title": "Cartesian-Space Paths",
+          "stories": [
+            {
+              "id": "S-039",
+              "key": "ROBO-39",
+              "type": "story",
+              "title": "Straight-line Cartesian end-effector paths",
+              "description": "As a user, I want the end-effector to move in a straight line in Cartesian space so the arm can follow a linear trajectory to the target.",
+              "priority": "must_have",
+              "story_points": 8,
+              "sprint": "S11",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Linear interpolation in task space",
+                "IK solved at each waypoint (>= 50 pts/sec)",
+                "Singularity detection and avoidance"
+              ],
+              "blocked_by": [
+                "S-038"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F9.3",
+          "title": "Collision Avoidance",
+          "stories": [
+            {
+              "id": "S-040",
+              "key": "ROBO-40",
+              "type": "story",
+              "title": "Self-collision checking during planned moves",
+              "description": "As an engineer, I want basic self-collision checking so the arm doesn't crash into itself during planned moves.",
+              "priority": "should_have",
+              "story_points": 8,
+              "sprint": "S12",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Simplified geometric model (cylinders per link)",
+                "Collision check at each waypoint",
+                "Path rejected if collision detected"
+              ],
+              "blocked_by": [
+                "S-039"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F9.4",
+          "title": "Real-Time Tracking Loop",
+          "stories": [
+            {
+              "id": "S-041",
+              "key": "ROBO-41",
+              "type": "story",
+              "title": "Continuous real-time colored object tracking",
+              "description": "As a user, I want the arm to continuously follow a moving colored object in real-time so it tracks the ball smoothly.",
+              "priority": "must_have",
+              "story_points": 13,
+              "sprint": "S12",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Vision -> IK -> Command pipeline at >= 30Hz",
+                "Predictive filtering (Kalman or EMA)",
+                "Smooth motion even with noisy detections",
+                "Graceful stop when object lost"
+              ],
+              "blocked_by": [
+                "S-032",
+                "S-038"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E10",
+      "key": "ROBO-E10",
+      "title": "Autonomous Ops & Demo",
+      "phase": "Phase 2",
+      "labels": [
+        "phase-2-vision",
+        "testing"
+      ],
+      "description": "End-to-end autonomous demos, monitoring dashboard, performance metrics, and final documentation.",
+      "features": [
+        {
+          "id": "F10.1",
+          "title": "Pick & Place Demo",
+          "stories": [
+            {
+              "id": "S-042",
+              "key": "ROBO-42",
+              "type": "story",
+              "title": "Autonomous pick-and-place of colored object",
+              "description": "As a user, I want the arm to autonomously pick up a colored object and place it at a target location so I can demo the full pipeline.",
+              "priority": "should_have",
+              "story_points": 13,
+              "sprint": "S13",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "testing"
+              ],
+              "acceptance_criteria": [
+                "Detects object -> plans path -> picks -> places",
+                "Success rate >= 70% over 10 trials",
+                "End-to-end latency < 3s"
+              ],
+              "blocked_by": [
+                "S-041"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F10.2",
+          "title": "Web Dashboard v2",
+          "stories": [
+            {
+              "id": "S-043",
+              "key": "ROBO-43",
+              "type": "story",
+              "title": "RPi web dashboard with camera feed and IK overlay",
+              "description": "As a user, I want a web dashboard on the RPi showing camera feed, joint states, and IK target so I can monitor autonomous operation.",
+              "priority": "should_have",
+              "story_points": 8,
+              "sprint": "S13",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "software"
+              ],
+              "acceptance_criteria": [
+                "Live camera stream with overlay",
+                "Joint angle gauges",
+                "IK target marker on video",
+                "Mode selector (manual / track / auto)"
+              ],
+              "blocked_by": [
+                "S-041"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F10.3",
+          "title": "Performance Metrics",
+          "stories": [
+            {
+              "id": "S-044",
+              "key": "ROBO-44",
+              "type": "story",
+              "title": "Logged performance metrics and analysis notebook",
+              "description": "As an engineer, I want logged metrics (tracking error, loop timing, success rate) so I can benchmark and improve the system.",
+              "priority": "should_have",
+              "story_points": 5,
+              "sprint": "S14",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "testing"
+              ],
+              "acceptance_criteria": [
+                "CSV logging of key metrics per run",
+                "Tracking error (mm) histogram",
+                "Loop timing statistics",
+                "Dashboard or Jupyter notebook for analysis"
+              ],
+              "blocked_by": [
+                "S-042"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F10.4",
+          "title": "Documentation v2",
+          "stories": [
+            {
+              "id": "S-045",
+              "key": "ROBO-45",
+              "type": "story",
+              "title": "Full system documentation with demo videos",
+              "description": "As a contributor, I want full system documentation including vision pipeline, IK math, and demo videos so the project is presentable to investors or open-source community.",
+              "priority": "should_have",
+              "story_points": 5,
+              "sprint": "S14",
+              "status": "backlog",
+              "labels": [
+                "phase-2-vision",
+                "documentation"
+              ],
+              "acceptance_criteria": [
+                "Architecture diagram",
+                "IK derivation document",
+                "Demo video (60s) on YouTube/GitHub",
+                "Setup guide for Phase 2 hardware"
+              ],
+              "blocked_by": [
+                "S-042"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "format_version": "1.0",
+    "generated": "2026-02-12",
+    "total_stories": 45,
+    "total_story_points": 245,
+    "import_notes": {
+      "jira": "Use Jira CSV import: flatten stories from this JSON into rows with columns: Summary, Description, Issue Type, Epic Link, Priority, Story Points, Sprint, Labels, Acceptance Criteria. Map priority values: must_have->Highest, should_have->High, could_have->Medium.",
+      "linear": "Use Linear API bulk import. Map: key->identifier, title->title, description->description, story_points->estimate, labels->labelIds, sprint->cycleName, blocked_by->relations.",
+      "azure_devops": "Map: type=story->Work Item Type=User Story, epic->Feature parent, story_points->Story Points, sprint->Iteration Path, blocked_by->Predecessor links.",
+      "trello": "Create one list per sprint. Create cards from stories. Use labels for epics and phases. Checklists for acceptance criteria.",
+      "github_projects": "Use gh CLI: create items from stories, set custom fields for story_points/sprint/priority, convert acceptance_criteria to task lists in issue body."
+    }
+  }
+}
