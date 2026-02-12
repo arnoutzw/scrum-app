@@ -169,6 +169,12 @@ const LABEL_COLORS = {
   zinc: { bg: 'bg-zinc-700', text: 'text-zinc-400', dot: 'bg-zinc-500' }
 };
 
+const TYPE_MAP = {
+  story: { label: 'Story', color: 'text-blue-400', bg: 'bg-blue-500/20', icon: 'bookmark' },
+  feature: { label: 'Feature', color: 'text-purple-400', bg: 'bg-purple-500/20', icon: 'puzzle' },
+  epic: { label: 'Epic', color: 'text-amber-400', bg: 'bg-amber-500/20', icon: 'zap' }
+};
+
 const AVATAR_COLORS = ['amber', 'blue', 'cyan', 'purple', 'red', 'green', 'pink', 'orange'];
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -910,8 +916,11 @@ function renderCard(card, colId) {
         </div>
       ` : ''}
 
-      <!-- Title -->
-      <p class="text-sm text-zinc-100 font-medium mb-2">${escHtml(card.title)}</p>
+      <!-- Type & Title -->
+      <div class="flex items-center gap-2 mb-2">
+        ${card.type && TYPE_MAP[card.type] ? `<span class="text-xs px-1.5 py-0.5 rounded font-mono ${TYPE_MAP[card.type].bg} ${TYPE_MAP[card.type].color} flex items-center gap-1 flex-shrink-0"><i data-lucide="${TYPE_MAP[card.type].icon}" class="w-3 h-3"></i>${TYPE_MAP[card.type].label}</span>` : ''}
+        <p class="text-sm text-zinc-100 font-medium">${escHtml(card.title)}</p>
+      </div>
 
       <!-- Meta Row -->
       <div class="flex items-center gap-2 flex-wrap">
@@ -972,31 +981,73 @@ function renderBacklog(proj) {
           <h2 class="font-mono font-bold text-lg text-zinc-100">Backlog</h2>
           <span class="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-400 rounded font-mono">${cards.length}</span>
         </div>
-        <button onclick="promptQuickAdd('backlog')"
-          class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
-          <i data-lucide="plus" class="w-4 h-4"></i> Add Task
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="openBulkImportModal()"
+            class="bg-zinc-700 hover:bg-zinc-600 text-zinc-100 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <i data-lucide="upload" class="w-4 h-4"></i> Bulk Import
+          </button>
+          <button onclick="promptQuickAdd('backlog')"
+            class="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i> Add Task
+          </button>
+        </div>
       </div>
 
       ${cards.length === 0 ? `
         <div class="flex flex-col items-center justify-center py-16 text-zinc-600">
           <i data-lucide="clipboard-list" class="w-12 h-12 mb-3"></i>
           <p class="font-mono text-sm mb-1">Backlog is empty</p>
-          <p class="text-xs text-zinc-600">Add tasks to plan your project</p>
+          <p class="text-xs text-zinc-600">Add tasks or use Bulk Import to get started</p>
         </div>
       ` : ''}
 
       <div class="space-y-2">
-        ${cards.map(card => {
-          const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
-          const overdue = isOverdue(card);
-          const subtasksDone = (card.subtasks || []).filter(s => s.done).length;
-          const subtasksTotal = (card.subtasks || []).length;
-          const blocked = isBlocked(card.id);
-          const depCount = (card.dependencies || []).length;
-          const dependentCount = getDependents(card.id).length;
-          return `
-            <div class="bg-zinc-900 border ${blocked ? 'border-red-500/40' : 'border-zinc-700'} rounded-lg p-4 flex items-start gap-4
+        ${(() => {
+          // Group cards: epics first, then their children, then ungrouped
+          const epics = cards.filter(c => c.type === 'epic');
+          const features = cards.filter(c => c.type === 'feature');
+          const stories = cards.filter(c => c.type === 'story');
+          const untyped = cards.filter(c => !c.type || !TYPE_MAP[c.type]);
+          // Build ordered list: epics with children nested, then orphans, then untyped
+          const ordered = [];
+          const placed = new Set();
+          for (const epic of epics) {
+            ordered.push(epic);
+            placed.add(epic.id);
+            const epicChildren = cards.filter(c => c.parentId === epic.id);
+            for (const child of epicChildren) {
+              ordered.push(child);
+              placed.add(child.id);
+              const grandchildren = cards.filter(c => c.parentId === child.id);
+              for (const gc of grandchildren) { ordered.push(gc); placed.add(gc.id); }
+            }
+          }
+          // Features not under epics
+          for (const feat of features) {
+            if (placed.has(feat.id)) continue;
+            ordered.push(feat);
+            placed.add(feat.id);
+            const featChildren = cards.filter(c => c.parentId === feat.id);
+            for (const child of featChildren) { ordered.push(child); placed.add(child.id); }
+          }
+          // Remaining
+          for (const c of cards) {
+            if (!placed.has(c.id)) { ordered.push(c); placed.add(c.id); }
+          }
+          return ordered.map(card => {
+            const pri = PRIORITY_MAP[card.priority] || PRIORITY_MAP.medium;
+            const overdue = isOverdue(card);
+            const subtasksDone = (card.subtasks || []).filter(s => s.done).length;
+            const subtasksTotal = (card.subtasks || []).length;
+            const blocked = isBlocked(card.id);
+            const depCount = (card.dependencies || []).length;
+            const dependentCount = getDependents(card.id).length;
+            const cardType = TYPE_MAP[card.type];
+            const parent = card.parentId ? cards.find(c => c.id === card.parentId) : null;
+            const grandparent = parent?.parentId ? cards.find(c => c.id === parent.parentId) : null;
+            const indent = grandparent ? 'ml-10' : (parent ? 'ml-5' : '');
+            return `<div class="${indent}">` + `
+            <div class="bg-zinc-900 border ${blocked ? 'border-red-500/40' : card.type === 'epic' ? 'border-amber-500/30' : card.type === 'feature' ? 'border-purple-500/20' : 'border-zinc-700'} rounded-lg p-4 flex items-start gap-4
               hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 cursor-pointer group relative"
               onclick="openCardDetail('${card.id}')"
               draggable="true"
@@ -1012,6 +1063,8 @@ function renderBacklog(proj) {
 
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
+                  ${parent ? '<i data-lucide="corner-down-right" class="w-3 h-3 text-zinc-600 flex-shrink-0"></i>' : ''}
+                  ${cardType ? `<span class="text-xs px-1.5 py-0.5 rounded font-mono ${cardType.bg} ${cardType.color} flex items-center gap-1 flex-shrink-0"><i data-lucide="${cardType.icon}" class="w-3 h-3"></i>${cardType.label}</span>` : ''}
                   <p class="font-medium text-zinc-100 truncate">${escHtml(card.title)}</p>
                 </div>
                 ${card.description ? `<p class="text-xs text-zinc-500 line-clamp-2 mb-2">${escHtml(card.description)}</p>` : ''}
@@ -1045,8 +1098,9 @@ function renderBacklog(proj) {
                 </select>
               </div>
             </div>
-          `;
-        }).join('')}
+          </div>`;
+          }).join('');
+        })()}
       </div>
     </div>
   `;
@@ -1504,6 +1558,7 @@ function renderSettings(proj) {
 // ─── Card Detail Modal ─────────────────────────────────────────────────────────
 function renderModal() {
   if (modal?.type === 'card-detail') return renderCardDetailModal(modal.data);
+  if (modal?.type === 'bulk-import') return renderBulkImportModal();
   return '';
 }
 
@@ -1554,14 +1609,22 @@ function renderCardDetailModal(card) {
         </div>
 
         <div class="p-5 space-y-5">
-          <!-- Status & Priority Row -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <!-- Status, Type, Priority & Due Date Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
               <label class="text-xs text-zinc-500 font-mono block mb-1">Status</label>
               <select onchange="updateCard('${card.id}', {columnId: this.value}); modal.data.columnId = this.value; render();"
                 class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
                 <option value="backlog" ${card.columnId === 'backlog' ? 'selected' : ''}>Backlog</option>
                 ${proj.columns.map(c => `<option value="${c.id}" ${card.columnId === c.id ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1">Type</label>
+              <select onchange="updateCard('${card.id}', {type: this.value}); modal.data.type = this.value; render();"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+                <option value="" ${!card.type ? 'selected' : ''}>None</option>
+                ${Object.entries(TYPE_MAP).map(([k, v]) => `<option value="${k}" ${card.type === k ? 'selected' : ''}>${v.label}</option>`).join('')}
               </select>
             </div>
             <div>
@@ -1579,8 +1642,8 @@ function renderCardDetailModal(card) {
             </div>
           </div>
 
-          <!-- Assignee & Estimated Time -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Assignee, Estimated Time & Parent -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="text-xs text-zinc-500 font-mono block mb-1 flex items-center gap-1">
                 <i data-lucide="user" class="w-3 h-3"></i> Assignee
@@ -1600,6 +1663,19 @@ function renderCardDetailModal(card) {
               <input type="text" value="${escHtml(card.estimatedTime || '')}" placeholder="e.g., 2h, 1 day, 3 weekends…"
                 onchange="updateCard('${card.id}', {estimatedTime: this.value}); modal.data.estimatedTime = this.value;"
                 class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="text-xs text-zinc-500 font-mono block mb-1 flex items-center gap-1">
+                <i data-lucide="git-merge" class="w-3 h-3"></i> Parent
+              </label>
+              <select onchange="updateCard('${card.id}', {parentId: this.value}); modal.data.parentId = this.value; render();"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-zinc-100 focus:border-amber-500 focus:outline-none">
+                <option value="" ${!card.parentId ? 'selected' : ''}>None</option>
+                ${proj.cards.filter(c => c.id !== card.id && (c.type === 'epic' || c.type === 'feature')).map(c => {
+                  const t = TYPE_MAP[c.type];
+                  return `<option value="${c.id}" ${card.parentId === c.id ? 'selected' : ''}>[${t ? t.label : ''}] ${escHtml(c.title)}</option>`;
+                }).join('')}
+              </select>
             </div>
           </div>
 
@@ -1880,6 +1956,401 @@ function importData(event) {
     } catch { alert('Failed to parse JSON file.'); }
   };
   reader.readAsText(file);
+}
+
+// ─── Bulk Import ────────────────────────────────────────────────────────────
+
+let bulkImportState = { items: [], format: 'csv', raw: '', error: '' };
+
+function openBulkImportModal() {
+  bulkImportState = { items: [], format: 'csv', raw: '', error: '' };
+  modal = { type: 'bulk-import', data: {} };
+  render();
+}
+
+function setBulkImportFormat(fmt) {
+  bulkImportState.format = fmt;
+  bulkImportState.items = [];
+  bulkImportState.error = '';
+  render();
+}
+
+function parseBulkImportCSV(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  if (lines.length < 2) return { items: [], error: 'CSV must have a header row and at least one data row.' };
+  const headerLine = lines[0];
+  const headers = parseCSVRow(headerLine).map(h => h.toLowerCase().trim());
+  const required = ['type', 'title'];
+  for (const r of required) {
+    if (!headers.includes(r)) return { items: [], error: `Missing required column: "${r}". Required: Type, Title` };
+  }
+  const items = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseCSVRow(lines[i]);
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+    const type = row.type?.toLowerCase();
+    if (!['epic', 'feature', 'story'].includes(type)) {
+      errors.push(`Row ${i + 1}: Invalid type "${row.type}". Must be epic, feature, or story.`);
+      continue;
+    }
+    if (!row.title) {
+      errors.push(`Row ${i + 1}: Title is required.`);
+      continue;
+    }
+    const priority = row.priority?.toLowerCase();
+    items.push({
+      type,
+      title: row.title,
+      description: row.description || '',
+      priority: priority && PRIORITY_MAP[priority] ? priority : 'medium',
+      labels: row.labels ? row.labels.split(';').map(l => l.trim()).filter(Boolean) : [],
+      estimatedTime: row['estimated time'] || row.estimatedtime || row.estimate || '',
+      assignee: row.assignee || '',
+      parent: row.parent || ''
+    });
+  }
+  if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n') };
+  return { items, error: errors.length > 0 ? errors.join('\n') : '' };
+}
+
+function parseCSVRow(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseBulkImportJSON(text) {
+  try {
+    const data = JSON.parse(text);
+    const arr = Array.isArray(data) ? data : [data];
+    const items = [];
+    const errors = [];
+    function flatten(list, parentTitle) {
+      for (const item of list) {
+        const type = (item.type || 'story').toLowerCase();
+        if (!['epic', 'feature', 'story'].includes(type)) {
+          errors.push(`Invalid type "${item.type}" for "${item.title || 'untitled'}".`);
+          continue;
+        }
+        if (!item.title) {
+          errors.push('Item missing required "title" field.');
+          continue;
+        }
+        const priority = (item.priority || 'medium').toLowerCase();
+        items.push({
+          type,
+          title: item.title,
+          description: item.description || '',
+          priority: PRIORITY_MAP[priority] ? priority : 'medium',
+          labels: Array.isArray(item.labels) ? item.labels : (item.labels ? [item.labels] : []),
+          estimatedTime: item.estimatedTime || item.estimate || '',
+          assignee: item.assignee || '',
+          parent: parentTitle || ''
+        });
+        if (item.children && Array.isArray(item.children)) {
+          flatten(item.children, item.title);
+        }
+      }
+    }
+    flatten(arr, '');
+    if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n') };
+    return { items, error: errors.length > 0 ? errors.join('\n') : '' };
+  } catch (e) {
+    return { items: [], error: 'Invalid JSON: ' + e.message };
+  }
+}
+
+function previewBulkImport() {
+  const textarea = document.getElementById('bulk-import-text');
+  if (!textarea) return;
+  const text = textarea.value.trim();
+  if (!text) {
+    bulkImportState.error = 'Please paste or enter data to import.';
+    bulkImportState.items = [];
+    render();
+    return;
+  }
+  bulkImportState.raw = text;
+  const result = bulkImportState.format === 'csv' ? parseBulkImportCSV(text) : parseBulkImportJSON(text);
+  bulkImportState.items = result.items;
+  bulkImportState.error = result.error;
+  render();
+}
+
+function handleBulkImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    const textarea = document.getElementById('bulk-import-text');
+    if (textarea) textarea.value = text;
+    bulkImportState.raw = text;
+    if (file.name.endsWith('.json')) {
+      bulkImportState.format = 'json';
+    } else {
+      bulkImportState.format = 'csv';
+    }
+    previewBulkImport();
+  };
+  reader.readAsText(file);
+}
+
+function executeBulkImport() {
+  const items = bulkImportState.items;
+  if (!items || items.length === 0) return;
+  const proj = getProject();
+  const backlogCards = getBacklogCards();
+  let order = backlogCards.length;
+  // First pass: create all cards and build a title->id map for parent linking
+  const titleToId = {};
+  const newCards = [];
+  for (const item of items) {
+    const id = uid();
+    titleToId[item.title] = id;
+    newCards.push({
+      id,
+      title: item.title,
+      description: item.description,
+      priority: item.priority,
+      labels: item.labels,
+      materials: '',
+      estimatedTime: item.estimatedTime,
+      dueDate: '',
+      subtasks: [],
+      dependencies: [],
+      assignee: item.assignee,
+      columnId: 'backlog',
+      order: order++,
+      createdAt: Date.now(),
+      type: item.type,
+      parentId: ''
+    });
+  }
+  // Second pass: link parents
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].parent) {
+      const parentId = titleToId[items[i].parent];
+      if (parentId) {
+        newCards[i].parentId = parentId;
+      }
+    }
+  }
+  proj.cards.push(...newCards);
+  bulkImportState = { items: [], format: 'csv', raw: '', error: '' };
+  modal = null;
+  persist();
+}
+
+function downloadBulkTemplate(format) {
+  let content, filename, type;
+  if (format === 'csv') {
+    content = 'Type,Title,Description,Priority,Labels,Estimated Time,Assignee,Parent\n';
+    content += 'epic,User Authentication,Complete auth system,high,,,\n';
+    content += 'feature,Login System,Login functionality,high,,2d,User Authentication\n';
+    content += 'story,Login Form UI,Create the login form,medium,General,4h,,Login System\n';
+    content += 'story,Login API Endpoint,Build the API,high,,4h,,Login System\n';
+    content += 'feature,Registration,User signup flow,medium,,3d,,User Authentication\n';
+    content += 'story,Signup Form,Create signup form,medium,,4h,,Registration\n';
+    content += 'epic,Dashboard,Main dashboard views,medium,,,\n';
+    content += 'story,Dashboard Layout,Create layout,low,,2h,,Dashboard\n';
+    filename = 'bulk-import-template.csv';
+    type = 'text/csv';
+  } else {
+    const template = [
+      {
+        type: 'epic',
+        title: 'User Authentication',
+        description: 'Complete auth system',
+        priority: 'high',
+        children: [
+          {
+            type: 'feature',
+            title: 'Login System',
+            description: 'Login functionality',
+            priority: 'high',
+            estimatedTime: '2d',
+            children: [
+              { type: 'story', title: 'Login Form UI', description: 'Create the login form', priority: 'medium', labels: ['General'], estimatedTime: '4h' },
+              { type: 'story', title: 'Login API Endpoint', description: 'Build the API', priority: 'high', estimatedTime: '4h' }
+            ]
+          },
+          {
+            type: 'feature',
+            title: 'Registration',
+            description: 'User signup flow',
+            priority: 'medium',
+            estimatedTime: '3d',
+            children: [
+              { type: 'story', title: 'Signup Form', description: 'Create signup form', priority: 'medium', estimatedTime: '4h' }
+            ]
+          }
+        ]
+      },
+      {
+        type: 'epic',
+        title: 'Dashboard',
+        description: 'Main dashboard views',
+        priority: 'medium',
+        children: [
+          { type: 'story', title: 'Dashboard Layout', description: 'Create layout', priority: 'low', estimatedTime: '2h' }
+        ]
+      }
+    ];
+    content = JSON.stringify(template, null, 2);
+    filename = 'bulk-import-template.json';
+    type = 'application/json';
+  }
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function renderBulkImportModal() {
+  const { items, format, error } = bulkImportState;
+  const epicCount = items.filter(i => i.type === 'epic').length;
+  const featureCount = items.filter(i => i.type === 'feature').length;
+  const storyCount = items.filter(i => i.type === 'story').length;
+
+  return `
+    <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 fade-in" onclick="if(event.target===this){closeModal()}">
+      <div class="bg-zinc-900 rounded-xl border border-zinc-700 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl" onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-5 border-b border-zinc-800">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <i data-lucide="upload" class="w-5 h-5 text-amber-400"></i>
+            </div>
+            <div>
+              <h3 class="font-mono font-bold text-zinc-100 text-lg">Bulk Import</h3>
+              <p class="text-xs text-zinc-500">Import epics, features &amp; stories to the backlog</p>
+            </div>
+          </div>
+          <button onclick="closeModal()" class="text-zinc-400 hover:text-zinc-200 p-2 rounded-lg hover:bg-zinc-800 transition-colors">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+          <!-- Format toggle & templates -->
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex bg-zinc-800 rounded-lg p-0.5 border border-zinc-700">
+              <button onclick="setBulkImportFormat('csv')"
+                class="px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${format === 'csv' ? 'bg-amber-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:text-zinc-200'}">
+                CSV
+              </button>
+              <button onclick="setBulkImportFormat('json')"
+                class="px-3 py-1.5 rounded-md text-xs font-mono transition-colors ${format === 'json' ? 'bg-amber-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:text-zinc-200'}">
+                JSON
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="downloadBulkTemplate('${format}')"
+                class="text-xs font-mono text-amber-400 hover:text-amber-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-zinc-800 transition-colors">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i> Download ${format.toUpperCase()} Template
+              </button>
+              <label class="text-xs font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer">
+                <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Upload File
+                <input type="file" accept=".csv,.json,.txt" onchange="handleBulkImportFile(event)" class="hidden">
+              </label>
+            </div>
+          </div>
+
+          <!-- Input area -->
+          <div>
+            <label class="text-xs font-mono text-zinc-400 mb-1 block">
+              ${format === 'csv'
+                ? 'Paste CSV data (columns: Type, Title, Description, Priority, Labels, Estimated Time, Assignee, Parent)'
+                : 'Paste JSON array (each item: type, title, description, priority, labels, estimatedTime, assignee, children)'}
+            </label>
+            <textarea id="bulk-import-text"
+              class="w-full h-48 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none resize-none"
+              placeholder="${format === 'csv'
+                ? 'Type,Title,Description,Priority,Labels,Estimated Time,Assignee,Parent\\nepic,User Auth,Auth system,high,,,\\nfeature,Login,Login flow,high,,2d,User Auth\\nstory,Login Form,Create form,medium,General,4h,,Login'
+                : '[{\\n  \\"type\\": \\"epic\\",\\n  \\"title\\": \\"User Auth\\",\\n  \\"children\\": [{\\n    \\"type\\": \\"feature\\",\\n    \\"title\\": \\"Login\\"\\n  }]\\n}]'
+              }"
+              oninput="bulkImportState.raw=this.value">${escHtml(bulkImportState.raw)}</textarea>
+          </div>
+
+          <!-- Parse button -->
+          <button onclick="previewBulkImport()"
+            class="bg-zinc-700 hover:bg-zinc-600 text-zinc-100 font-mono font-bold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <i data-lucide="scan-search" class="w-4 h-4"></i> Preview Import
+          </button>
+
+          <!-- Error display -->
+          ${error ? `
+            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <p class="text-xs font-mono text-red-400 whitespace-pre-wrap">${escHtml(error)}</p>
+            </div>
+          ` : ''}
+
+          <!-- Preview -->
+          ${items.length > 0 ? `
+            <div class="border border-zinc-700 rounded-lg overflow-hidden">
+              <div class="bg-zinc-800 px-4 py-2 border-b border-zinc-700 flex items-center justify-between">
+                <span class="text-xs font-mono text-zinc-300 font-bold">Preview — ${items.length} items</span>
+                <div class="flex items-center gap-3">
+                  ${epicCount > 0 ? `<span class="text-xs font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400"><i data-lucide="zap" class="w-3 h-3 inline"></i> ${epicCount} epic${epicCount !== 1 ? 's' : ''}</span>` : ''}
+                  ${featureCount > 0 ? `<span class="text-xs font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400"><i data-lucide="puzzle" class="w-3 h-3 inline"></i> ${featureCount} feature${featureCount !== 1 ? 's' : ''}</span>` : ''}
+                  ${storyCount > 0 ? `<span class="text-xs font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400"><i data-lucide="bookmark" class="w-3 h-3 inline"></i> ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}</span>` : ''}
+                </div>
+              </div>
+              <div class="max-h-64 overflow-y-auto">
+                ${items.map((item, idx) => {
+                  const t = TYPE_MAP[item.type] || TYPE_MAP.story;
+                  const pri = PRIORITY_MAP[item.priority] || PRIORITY_MAP.medium;
+                  const indent = item.parent ? (items.find(p => p.title === item.parent && p.type === 'epic') ? 'pl-12' : 'pl-6') : '';
+                  return `
+                    <div class="flex items-center gap-3 px-4 py-2 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/50 ${indent}">
+                      ${item.parent ? '<i data-lucide="corner-down-right" class="w-3 h-3 text-zinc-600 flex-shrink-0"></i>' : ''}
+                      <span class="text-xs px-1.5 py-0.5 rounded font-mono ${t.bg} ${t.color} flex items-center gap-1 flex-shrink-0">
+                        <i data-lucide="${t.icon}" class="w-3 h-3"></i>${t.label}
+                      </span>
+                      <span class="text-sm text-zinc-100 truncate flex-1">${escHtml(item.title)}</span>
+                      <span class="text-xs px-1.5 py-0.5 rounded font-mono ${pri.bg} ${pri.color} flex-shrink-0">${pri.label}</span>
+                      ${item.assignee ? `<span class="text-xs text-zinc-500 font-mono flex-shrink-0">${escHtml(item.assignee)}</span>` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Footer -->
+        <div class="p-5 border-t border-zinc-800 flex items-center justify-between">
+          <button onclick="closeModal()"
+            class="px-4 py-2 text-sm font-mono text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors">
+            Cancel
+          </button>
+          <button onclick="executeBulkImport()" ${items.length === 0 ? 'disabled' : ''}
+            class="bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-900 font-mono font-bold px-6 py-2 rounded-lg transition-colors text-sm flex items-center gap-2">
+            <i data-lucide="upload" class="w-4 h-4"></i> Import ${items.length} Item${items.length !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function attachDragListeners() {
