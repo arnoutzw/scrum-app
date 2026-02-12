@@ -1960,7 +1960,7 @@ function importData(event) {
 
 // ─── Bulk Import ────────────────────────────────────────────────────────────
 
-let bulkImportState = { items: [], format: 'csv', raw: '', error: '' };
+let bulkImportState = { items: [], format: 'csv', raw: '', error: '', projectLabels: [] };
 
 function openBulkImportModal() {
   bulkImportState = { items: [], format: 'csv', raw: '', error: '' };
@@ -1975,44 +1975,97 @@ function setBulkImportFormat(fmt) {
   render();
 }
 
+// Map CSV header aliases to canonical names (supports Jira format)
+const CSV_HEADER_MAP = {
+  'type': 'type', 'issue type': 'type', 'issuetype': 'type', 'issue_type': 'type', 'work type': 'type',
+  'title': 'title', 'summary': 'title',
+  'description': 'description',
+  'priority': 'priority',
+  'labels': 'labels', 'label': 'labels',
+  'estimated time': 'estimatedTime', 'estimatedtime': 'estimatedTime', 'estimate': 'estimatedTime', 'original estimate': 'estimatedTime',
+  'story points': 'storyPoints', 'storypoints': 'storyPoints', 'story_points': 'storyPoints', 'points': 'storyPoints',
+  'assignee': 'assignee',
+  'parent': 'parent', 'parent id': 'parent', 'parent_id': 'parent',
+  'epic link': 'epicLink', 'epic_link': 'epicLink',
+  'epic name': 'epicName', 'epic_name': 'epicName',
+  'sprint': 'sprint', 'status': 'status',
+  'component': 'component', 'components': 'component',
+  'fix version': 'fixVersion', 'fix_version': 'fixVersion'
+};
+const ISSUE_TYPE_MAP = {
+  'epic': 'epic',
+  'feature': 'feature', 'initiative': 'feature',
+  'story': 'story', 'task': 'story', 'sub-task': 'story', 'subtask': 'story', 'bug': 'story', 'user story': 'story'
+};
+
 function parseBulkImportCSV(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-  if (lines.length < 2) return { items: [], error: 'CSV must have a header row and at least one data row.' };
-  const headerLine = lines[0];
-  const headers = parseCSVRow(headerLine).map(h => h.toLowerCase().trim());
-  const required = ['type', 'title'];
-  for (const r of required) {
-    if (!headers.includes(r)) return { items: [], error: `Missing required column: "${r}". Required: Type, Title` };
-  }
+  if (lines.length < 2) return { items: [], error: 'CSV must have a header row and at least one data row.', projectLabels: [] };
+  const rawHeaders = parseCSVRow(lines[0]).map(h => h.toLowerCase().trim());
+  const headers = rawHeaders.map(h => CSV_HEADER_MAP[h] || h);
+  const hasTitle = headers.includes('title');
+  if (!hasTitle) return { items: [], error: 'Missing required column: "Summary" or "Title".', projectLabels: [] };
+  const hasType = headers.includes('type');
+  const hasEpicLink = headers.includes('epicLink');
+  const hasEpicName = headers.includes('epicName');
+  // Collect indices for multi-value label columns (Jira pattern)
+  const labelIndices = [];
+  headers.forEach((h, idx) => { if (h === 'labels') labelIndices.push(idx); });
   const items = [];
   const errors = [];
   for (let i = 1; i < lines.length; i++) {
     const vals = parseCSVRow(lines[i]);
     const row = {};
-    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
-    const type = row.type?.toLowerCase();
-    if (!['epic', 'feature', 'story'].includes(type)) {
-      errors.push(`Row ${i + 1}: Invalid type "${row.type}". Must be epic, feature, or story.`);
+    headers.forEach((h, idx) => {
+      if (h === 'labels') return; // handled separately
+      row[h] = (vals[idx] || '').trim();
+    });
+    // Collect all label values
+    const allLabels = [];
+    for (const li of labelIndices) {
+      const v = (vals[li] || '').trim();
+      if (v) v.split(';').forEach(l => { if (l.trim()) allLabels.push(l.trim()); });
+    }
+    // Determine type
+    let type;
+    if (hasType && row.type) {
+      type = ISSUE_TYPE_MAP[row.type.toLowerCase()];
+      if (!type) {
+        errors.push('Row ' + (i + 1) + ': Unknown issue type "' + row.type + '".');
+        continue;
+      }
+    } else {
+      type = 'story';
+    }
+    const title = row.title;
+    if (!title) {
+      errors.push('Row ' + (i + 1) + ': Summary/Title is required.');
       continue;
     }
-    if (!row.title) {
-      errors.push(`Row ${i + 1}: Title is required.`);
-      continue;
+    const priority = PRIORITY_ALIASES[(row.priority || 'medium').toLowerCase()] || 'medium';
+    // Parent: use Epic Link (Jira) or Parent column
+    let parent = row.parent || '';
+    if (!parent && hasEpicLink && row.epicLink) {
+      parent = row.epicLink;
     }
-    const priority = row.priority?.toLowerCase();
+    const sp = row.storyPoints || '';
     items.push({
       type,
-      title: row.title,
+      title: (type === 'epic' && hasEpicName && row.epicName) ? row.epicName : title,
       description: row.description || '',
-      priority: priority && PRIORITY_MAP[priority] ? priority : 'medium',
-      labels: row.labels ? row.labels.split(';').map(l => l.trim()).filter(Boolean) : [],
-      estimatedTime: row['estimated time'] || row.estimatedtime || row.estimate || '',
+      priority,
+      labels: allLabels,
+      estimatedTime: row.estimatedTime || '',
+      storyPoints: sp ? sp + (sp.match(/SP$/i) ? '' : ' SP') : '',
       assignee: row.assignee || '',
-      parent: row.parent || ''
+      parent,
+      subtasks: [],
+      blockedBy: [],
+      sourceId: ''
     });
   }
-  if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n') };
-  return { items, error: errors.length > 0 ? errors.join('\n') : '' };
+  if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n'), projectLabels: [] };
+  return { items, error: errors.length > 0 ? errors.join('\n') : '', projectLabels: [] };
 }
 
 function parseCSVRow(line) {
@@ -2035,44 +2088,128 @@ function parseCSVRow(line) {
   return result;
 }
 
+// Map external priority schemes to internal priorities
+const PRIORITY_ALIASES = {
+  must_have: 'critical', must: 'critical', highest: 'critical', critical: 'critical',
+  should_have: 'high', should: 'high', high: 'high',
+  could_have: 'medium', could: 'medium', medium: 'medium', normal: 'medium',
+  wont_have: 'low', wont: 'low', low: 'low', lowest: 'low', nice_to_have: 'low'
+};
+
 function parseBulkImportJSON(text) {
   try {
     const data = JSON.parse(text);
-    const arr = Array.isArray(data) ? data : [data];
     const items = [];
     const errors = [];
-    function flatten(list, parentTitle) {
-      for (const item of list) {
-        const type = (item.type || 'story').toLowerCase();
-        if (!['epic', 'feature', 'story'].includes(type)) {
-          errors.push(`Invalid type "${item.type}" for "${item.title || 'untitled'}".`);
-          continue;
-        }
-        if (!item.title) {
-          errors.push('Item missing required "title" field.');
-          continue;
-        }
-        const priority = (item.priority || 'medium').toLowerCase();
+    let projectLabels = [];
+
+    // Detect rich project format (has epics array at top level or inside a wrapper)
+    const isRichFormat = data.epics && Array.isArray(data.epics);
+
+    if (isRichFormat) {
+      // Collect project labels for import
+      if (data.labels && Array.isArray(data.labels)) {
+        projectLabels = data.labels.map(l => ({ name: l.name, color: l.color }));
+      }
+
+      // Parse epics -> features -> stories
+      for (const epic of data.epics) {
+        if (!epic.title) { errors.push('Epic missing title.'); continue; }
+        const epicPri = PRIORITY_ALIASES[(epic.priority || 'medium').toLowerCase()] || 'medium';
         items.push({
-          type,
-          title: item.title,
-          description: item.description || '',
-          priority: PRIORITY_MAP[priority] ? priority : 'medium',
-          labels: Array.isArray(item.labels) ? item.labels : (item.labels ? [item.labels] : []),
-          estimatedTime: item.estimatedTime || item.estimate || '',
-          assignee: item.assignee || '',
-          parent: parentTitle || ''
+          type: 'epic',
+          title: epic.title,
+          description: epic.description || '',
+          priority: epicPri,
+          labels: Array.isArray(epic.labels) ? epic.labels : [],
+          estimatedTime: '',
+          storyPoints: '',
+          assignee: '',
+          parent: '',
+          subtasks: [],
+          blockedBy: [],
+          sourceId: epic.id || ''
         });
-        if (item.children && Array.isArray(item.children)) {
-          flatten(item.children, item.title);
+
+        if (epic.features && Array.isArray(epic.features)) {
+          for (const feature of epic.features) {
+            if (!feature.title) { errors.push('Feature missing title in epic "' + epic.title + '".'); continue; }
+            const featPri = PRIORITY_ALIASES[(feature.priority || 'medium').toLowerCase()] || 'medium';
+            items.push({
+              type: 'feature',
+              title: feature.title,
+              description: feature.description || '',
+              priority: featPri,
+              labels: Array.isArray(feature.labels) ? feature.labels : [],
+              estimatedTime: '',
+              storyPoints: '',
+              assignee: '',
+              parent: epic.title,
+              subtasks: [],
+              blockedBy: [],
+              sourceId: feature.id || ''
+            });
+
+            if (feature.stories && Array.isArray(feature.stories)) {
+              for (const story of feature.stories) {
+                if (!story.title) { errors.push('Story missing title in feature "' + feature.title + '".'); continue; }
+                const storyPri = PRIORITY_ALIASES[(story.priority || 'medium').toLowerCase()] || 'medium';
+                items.push({
+                  type: 'story',
+                  title: story.title,
+                  description: story.description || '',
+                  priority: storyPri,
+                  labels: Array.isArray(story.labels) ? story.labels : [],
+                  estimatedTime: story.estimatedTime || story.estimate || '',
+                  storyPoints: story.story_points ? String(story.story_points) + ' SP' : '',
+                  assignee: story.assignee || '',
+                  parent: feature.title,
+                  subtasks: Array.isArray(story.acceptance_criteria) ? story.acceptance_criteria.map(ac => ({ title: ac, done: false })) : [],
+                  blockedBy: Array.isArray(story.blocked_by) ? story.blocked_by : [],
+                  sourceId: story.id || ''
+                });
+              }
+            }
+          }
         }
       }
+    } else {
+      // Simple format: array of items with optional children
+      const arr = Array.isArray(data) ? data : [data];
+      function flatten(list, parentTitle) {
+        for (const item of list) {
+          const type = (item.type || 'story').toLowerCase();
+          if (!['epic', 'feature', 'story'].includes(type)) {
+            errors.push('Invalid type "' + (item.type || '') + '" for "' + (item.title || 'untitled') + '".');
+            continue;
+          }
+          if (!item.title) { errors.push('Item missing required "title" field.'); continue; }
+          const priority = PRIORITY_ALIASES[(item.priority || 'medium').toLowerCase()] || 'medium';
+          items.push({
+            type,
+            title: item.title,
+            description: item.description || '',
+            priority,
+            labels: Array.isArray(item.labels) ? item.labels : (item.labels ? [item.labels] : []),
+            estimatedTime: item.estimatedTime || item.estimate || '',
+            storyPoints: item.story_points ? String(item.story_points) + ' SP' : '',
+            assignee: item.assignee || '',
+            parent: parentTitle || '',
+            subtasks: Array.isArray(item.acceptance_criteria) ? item.acceptance_criteria.map(ac => ({ title: ac, done: false })) : [],
+            blockedBy: Array.isArray(item.blocked_by) ? item.blocked_by : [],
+            sourceId: item.id || ''
+          });
+          if (item.children && Array.isArray(item.children)) {
+            flatten(item.children, item.title);
+          }
+        }
+      }
+      flatten(arr, '');
     }
-    flatten(arr, '');
-    if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n') };
-    return { items, error: errors.length > 0 ? errors.join('\n') : '' };
+    if (errors.length > 0 && items.length === 0) return { items: [], error: errors.join('\n'), projectLabels };
+    return { items, error: errors.length > 0 ? errors.join('\n') : '', projectLabels };
   } catch (e) {
-    return { items: [], error: 'Invalid JSON: ' + e.message };
+    return { items: [], error: 'Invalid JSON: ' + e.message, projectLabels: [] };
   }
 }
 
@@ -2083,6 +2220,7 @@ function previewBulkImport() {
   if (!text) {
     bulkImportState.error = 'Please paste or enter data to import.';
     bulkImportState.items = [];
+    bulkImportState.projectLabels = [];
     render();
     return;
   }
@@ -2090,6 +2228,7 @@ function previewBulkImport() {
   const result = bulkImportState.format === 'csv' ? parseBulkImportCSV(text) : parseBulkImportJSON(text);
   bulkImportState.items = result.items;
   bulkImportState.error = result.error;
+  bulkImportState.projectLabels = result.projectLabels || [];
   render();
 }
 
@@ -2118,12 +2257,43 @@ function executeBulkImport() {
   const proj = getProject();
   const backlogCards = getBacklogCards();
   let order = backlogCards.length;
-  // First pass: create all cards and build a title->id map for parent linking
+
+  // Import project labels if available
+  const newLabels = bulkImportState.projectLabels || [];
+  if (newLabels.length > 0) {
+    const existingNames = new Set(proj.labels.map(l => l.name));
+    // Map hex colors to the closest available label color
+    const hexToLabelColor = (hex) => {
+      if (!hex) return 'zinc';
+      const h = hex.replace('#', '').toLowerCase();
+      const r = parseInt(h.substring(0, 2), 16) || 0;
+      const g = parseInt(h.substring(2, 4), 16) || 0;
+      const b = parseInt(h.substring(4, 6), 16) || 0;
+      if (r > 180 && g > 120 && b < 80) return 'amber';
+      if (r < 80 && g < 80 && b > 180) return 'blue';
+      if (r < 80 && g > 150 && b > 150) return 'cyan';
+      if (r > 120 && g < 80 && b > 150) return 'purple';
+      if (r > 180 && g < 80 && b < 80) return 'red';
+      if (r < 80 && g > 150 && b < 80) return 'green';
+      return 'zinc';
+    };
+    for (const nl of newLabels) {
+      if (!existingNames.has(nl.name)) {
+        proj.labels.push({ name: nl.name, color: hexToLabelColor(nl.color) });
+        existingNames.add(nl.name);
+      }
+    }
+  }
+
+  // First pass: create all cards and build maps for linking
   const titleToId = {};
+  const sourceIdToId = {};
   const newCards = [];
   for (const item of items) {
     const id = uid();
     titleToId[item.title] = id;
+    if (item.sourceId) sourceIdToId[item.sourceId] = id;
+    const estimatedTime = item.storyPoints || item.estimatedTime || '';
     newCards.push({
       id,
       title: item.title,
@@ -2131,9 +2301,9 @@ function executeBulkImport() {
       priority: item.priority,
       labels: item.labels,
       materials: '',
-      estimatedTime: item.estimatedTime,
+      estimatedTime,
       dueDate: '',
-      subtasks: [],
+      subtasks: item.subtasks || [],
       dependencies: [],
       assignee: item.assignee,
       columnId: 'backlog',
@@ -2143,17 +2313,27 @@ function executeBulkImport() {
       parentId: ''
     });
   }
-  // Second pass: link parents
+  // Second pass: link parents and dependencies
   for (let i = 0; i < items.length; i++) {
+    // Parent linking
     if (items[i].parent) {
       const parentId = titleToId[items[i].parent];
       if (parentId) {
         newCards[i].parentId = parentId;
       }
     }
+    // Dependency linking (blocked_by source IDs)
+    if (items[i].blockedBy && items[i].blockedBy.length > 0) {
+      const deps = [];
+      for (const ref of items[i].blockedBy) {
+        const depId = sourceIdToId[ref];
+        if (depId) deps.push(depId);
+      }
+      if (deps.length > 0) newCards[i].dependencies = deps;
+    }
   }
   proj.cards.push(...newCards);
-  bulkImportState = { items: [], format: 'csv', raw: '', error: '' };
+  bulkImportState = { items: [], format: 'csv', raw: '', error: '', projectLabels: [] };
   modal = null;
   persist();
 }
@@ -2161,15 +2341,14 @@ function executeBulkImport() {
 function downloadBulkTemplate(format) {
   let content, filename, type;
   if (format === 'csv') {
-    content = 'Type,Title,Description,Priority,Labels,Estimated Time,Assignee,Parent\n';
-    content += 'epic,User Authentication,Complete auth system,high,,,\n';
-    content += 'feature,Login System,Login functionality,high,,2d,User Authentication\n';
-    content += 'story,Login Form UI,Create the login form,medium,General,4h,,Login System\n';
-    content += 'story,Login API Endpoint,Build the API,high,,4h,,Login System\n';
-    content += 'feature,Registration,User signup flow,medium,,3d,,User Authentication\n';
-    content += 'story,Signup Form,Create signup form,medium,,4h,,Registration\n';
-    content += 'epic,Dashboard,Main dashboard views,medium,,,\n';
-    content += 'story,Dashboard Layout,Create layout,low,,2h,,Dashboard\n';
+    content = 'Issue Type,Summary,Description,Priority,Story Points,Labels,Epic Name,Epic Link,Assignee\n';
+    content += 'Epic,User Authentication,Complete auth system,Highest,,,,\n';
+    content += 'Epic,Dashboard,Main dashboard views,Medium,,,,\n';
+    content += 'Story,Login Form UI,Create the login form,High,5,,User Authentication,,\n';
+    content += 'Story,Login API Endpoint,Build the API,Highest,8,,User Authentication,,\n';
+    content += 'Story,Signup Form,Create signup form,Medium,3,,User Authentication,,\n';
+    content += 'Story,Dashboard Layout,Create layout,Low,2,,Dashboard,,\n';
+    content += 'Task,Write unit tests,Add test coverage,Medium,3,,Dashboard,,\n';
     filename = 'bulk-import-template.csv';
     type = 'text/csv';
   } else {
@@ -2279,13 +2458,13 @@ function renderBulkImportModal() {
           <div>
             <label class="text-xs font-mono text-zinc-400 mb-1 block">
               ${format === 'csv'
-                ? 'Paste CSV data (columns: Type, Title, Description, Priority, Labels, Estimated Time, Assignee, Parent)'
-                : 'Paste JSON array (each item: type, title, description, priority, labels, estimatedTime, assignee, children)'}
+                ? 'Paste CSV data — Jira-compatible (Issue Type, Summary, Epic Link, Story Points, etc.) or custom (Type, Title, Parent, etc.)'
+                : 'Paste JSON — hierarchical (epics &gt; features &gt; stories) or flat array with children'}
             </label>
             <textarea id="bulk-import-text"
               class="w-full h-48 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm font-mono text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none resize-none"
               placeholder="${format === 'csv'
-                ? 'Type,Title,Description,Priority,Labels,Estimated Time,Assignee,Parent\\nepic,User Auth,Auth system,high,,,\\nfeature,Login,Login flow,high,,2d,User Auth\\nstory,Login Form,Create form,medium,General,4h,,Login'
+                ? 'Issue Type,Summary,Description,Priority,Story Points,Labels,Epic Link\\nEpic,User Auth,Auth system,Highest,,,,\\nStory,Login Form,Create form,High,5,,User Auth'
                 : '[{\\n  \\"type\\": \\"epic\\",\\n  \\"title\\": \\"User Auth\\",\\n  \\"children\\": [{\\n    \\"type\\": \\"feature\\",\\n    \\"title\\": \\"Login\\"\\n  }]\\n}]'
               }"
               oninput="bulkImportState.raw=this.value">${escHtml(bulkImportState.raw)}</textarea>
@@ -2327,6 +2506,9 @@ function renderBulkImportModal() {
                         <i data-lucide="${t.icon}" class="w-3 h-3"></i>${t.label}
                       </span>
                       <span class="text-sm text-zinc-100 truncate flex-1">${escHtml(item.title)}</span>
+                      ${item.storyPoints ? `<span class="text-xs text-zinc-500 font-mono flex-shrink-0">${escHtml(item.storyPoints)}</span>` : ''}
+                      ${item.subtasks && item.subtasks.length > 0 ? `<span class="text-xs text-zinc-500 font-mono flex-shrink-0 flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i>${item.subtasks.length}</span>` : ''}
+                      ${item.blockedBy && item.blockedBy.length > 0 ? `<span class="text-xs text-cyan-400 font-mono flex-shrink-0 flex items-center gap-1"><i data-lucide="git-branch" class="w-3 h-3"></i>${item.blockedBy.length}</span>` : ''}
                       <span class="text-xs px-1.5 py-0.5 rounded font-mono ${pri.bg} ${pri.color} flex-shrink-0">${pri.label}</span>
                       ${item.assignee ? `<span class="text-xs text-zinc-500 font-mono flex-shrink-0">${escHtml(item.assignee)}</span>` : ''}
                     </div>
