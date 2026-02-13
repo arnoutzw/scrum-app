@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
 <script>
 tailwind.config = {
@@ -124,7 +125,69 @@ firebase.initializeApp({
   measurementId: "G-VXDKDLXP7L"
 });
 const db = firebase.firestore();
+const auth = firebase.auth();
 const FIRESTORE_DOC = db.collection('kanban-boards').doc('shared');
+
+// ─── SSO Auth Receiver ────────────────────────────────────────────────────────
+let currentUser = null;
+let isAdmin = false;
+
+window.addEventListener('message', async (event) => {
+  const data = event.data;
+  if (!data || data.type !== 'admin-auth') return;
+
+  isAdmin = !!data.isAdmin;
+
+  if (data.sso) {
+    currentUser = {
+      uid: data.sso.uid,
+      email: data.sso.email,
+      displayName: data.sso.displayName,
+      photoURL: data.sso.photoURL,
+      idToken: data.sso.idToken,
+    };
+
+    // Sign into Firebase Auth using the SSO credential
+    try {
+      const credential = firebase.auth.GoogleAuthProvider.credential(data.sso.idToken);
+      await auth.signInWithCredential(credential);
+      console.log('Signed in via parent SSO:', currentUser.displayName);
+    } catch (err) {
+      console.warn('SSO sign-in failed, using token for display only:', err.message);
+    }
+
+    onUserSignedIn(currentUser);
+  } else {
+    currentUser = null;
+    try { await auth.signOut(); } catch {}
+    onUserSignedOut();
+  }
+});
+
+function onUserSignedIn(user) {
+  console.log('User signed in:', user.displayName, user.email);
+  render();
+}
+
+function onUserSignedOut() {
+  console.log('User signed out');
+  render();
+}
+
+// ─── Per-User Data (Firestore) ────────────────────────────────────────────────
+async function saveUserData(key, value) {
+  if (!currentUser) return;
+  await db.collection('users').doc(currentUser.uid)
+    .collection('app_data').doc(key)
+    .set(value, { merge: true });
+}
+
+async function loadUserData(key) {
+  if (!currentUser) return null;
+  const doc = await db.collection('users').doc(currentUser.uid)
+    .collection('app_data').doc(key).get();
+  return doc.exists ? doc.data() : null;
+}
 
 let _fsWriteTimer = null;
 function saveToFirestore(data) {
@@ -755,6 +818,15 @@ function render() {
                 <i data-lucide="settings" class="w-4 h-4 sm:hidden"></i>
               </button>
             </div>
+            <!-- SSO User Info -->
+            ${currentUser ? `
+            <div id="user-info" class="flex items-center gap-2 ml-2 pl-2 border-l border-zinc-700">
+              <img src="${escHtml(currentUser.photoURL)}" alt=""
+                   style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(245,158,11,0.5);"
+                   onerror="this.style.display='none'">
+              <span class="font-mono text-xs text-zinc-400 hidden sm:inline">${escHtml(currentUser.displayName || currentUser.email)}</span>
+            </div>
+            ` : ''}
           </div>
         </div>
         <!-- Filter Bar -->
