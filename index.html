@@ -1735,8 +1735,33 @@ function renderSettings(proj) {
           </div>
         </div>
       </div>
+
+      <!-- Clear Data -->
+      <div class="bg-zinc-900 border border-red-500/30 rounded-lg p-5">
+        <h3 class="font-mono font-bold text-red-400 mb-3 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i> Danger Zone
+        </h3>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-zinc-300">Clear Boards &amp; Backlog</p>
+            <p class="text-xs text-zinc-500">Remove all cards from every column and the backlog for this project</p>
+          </div>
+          <button onclick="wipeBoardsAndBacklog()"
+            class="bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-mono font-bold px-3 py-1.5 rounded-lg transition-colors border border-red-500/30">
+            Wipe All Cards
+          </button>
+        </div>
+      </div>
     </div>
   `;
+}
+
+function wipeBoardsAndBacklog() {
+  if (!confirm('Are you sure you want to delete ALL cards from every column and the backlog? This cannot be undone.')) return;
+  const proj = getProject();
+  if (!proj) return;
+  proj.cards = [];
+  persist();
 }
 
 // ─── Card Detail Modal ─────────────────────────────────────────────────────────
