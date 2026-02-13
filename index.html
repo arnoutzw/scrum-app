@@ -1751,6 +1751,16 @@ function renderSettings(proj) {
             Wipe All Cards
           </button>
         </div>
+        <div class="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+          <div>
+            <p class="text-sm text-zinc-300">Clear Retrospectives</p>
+            <p class="text-xs text-zinc-500">Remove all retro boards and notes for this project</p>
+          </div>
+          <button onclick="wipeRetros()"
+            class="bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-mono font-bold px-3 py-1.5 rounded-lg transition-colors border border-red-500/30">
+            Wipe All Retros
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -1761,6 +1771,14 @@ function wipeBoardsAndBacklog() {
   const proj = getProject();
   if (!proj) return;
   proj.cards = [];
+  persist();
+}
+
+function wipeRetros() {
+  if (!confirm('Are you sure you want to delete ALL retrospective boards and notes? This cannot be undone.')) return;
+  const proj = getProject();
+  if (!proj) return;
+  proj.retro = { boards: [] };
   persist();
 }
 
