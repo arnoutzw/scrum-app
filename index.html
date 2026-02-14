@@ -60,6 +60,10 @@ tailwind.config = {
     min-height: 100dvh;
   }
 
+  /* Hide scrollbar on retro action bar while keeping scroll functionality */
+  .retro-actions-scroll::-webkit-scrollbar { display: none; }
+  .retro-actions-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
   /* Tap highlight removal for cleaner touch interactions */
   a, button, [onclick], [role="button"] {
     -webkit-tap-highlight-color: transparent;
@@ -4635,84 +4639,88 @@ function renderRetroCanvas(board) {
   return `
     <div class="flex flex-col h-full" style="min-height: calc(100dvh - 90px)">
       <!-- Retro Toolbar -->
-      <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-800/50 bg-zinc-900/50 flex-shrink-0">
-        <div class="flex items-center gap-3">
-          <button onclick="retroState.activeBoardId=null; render()"
-            class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors" title="Back to list">
-            <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          </button>
-          <span class="font-mono font-bold text-sm text-zinc-100">${escHtml(board.name)}</span>
-          <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono">${board.notes.length} notes</span>
-          <span class="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono"><span style="color:#ef4444;">&#9829;</span> ${totalVotes} <span style="color:#3b82f6;">&#128078;</span> ${totalDownvotes}</span>
-          <div class="flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700" id="retro-presence-bar">
+      <div class="flex flex-col border-b border-zinc-800/50 bg-zinc-900/50 flex-shrink-0">
+        <!-- Row 1: Navigation, info, timer, zoom -->
+        <div class="flex items-center justify-between px-3 py-1.5 gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <button onclick="retroState.activeBoardId=null; render()"
+              class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors flex-shrink-0" title="Back to list">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <span class="font-mono font-bold text-sm text-zinc-100 truncate">${escHtml(board.name)}</span>
+            <span class="hidden sm:inline text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono flex-shrink-0">${board.notes.length} notes</span>
+            <span class="hidden sm:inline text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono flex-shrink-0"><span style="color:#ef4444;">&#9829;</span> ${totalVotes} <span style="color:#3b82f6;">&#128078;</span> ${totalDownvotes}</span>
+            <div class="hidden sm:flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700" id="retro-presence-bar">
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <!-- Timer -->
+            <div id="retro-timer" class="flex items-center gap-1.5">
+              <button onclick="retroState.timer.total=Math.max(60,retroState.timer.total-60); renderRetroTimerDisplay()"
+                class="w-6 h-6 flex items-center justify-center text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">-</button>
+              <span class="font-mono text-base sm:text-lg font-bold text-zinc-300 w-10 sm:w-12 text-center">${Math.floor(retroState.timer.total / 60)}:00</span>
+              <button onclick="retroState.timer.total=Math.min(3600,retroState.timer.total+60); renderRetroTimerDisplay()"
+                class="w-6 h-6 flex items-center justify-center text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">+</button>
+              <button onclick="startRetroTimer(retroState.timer.total)"
+                class="flex items-center gap-1 px-2 py-1 text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
+                <i data-lucide="play" class="w-3 h-3"></i><span class="hidden sm:inline"> Start</span>
+              </button>
+            </div>
+            <div class="w-px h-5 bg-zinc-700"></div>
+            <!-- Zoom -->
+            <button onclick="retroState.canvas.zoom=Math.max(0.3,retroState.canvas.zoom-0.1); render()"
+              class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors" title="Zoom out">
+              <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+            </button>
+            <span class="text-xs font-mono text-zinc-400 w-8 text-center">${Math.round(zoom * 100)}%</span>
+            <button onclick="retroState.canvas.zoom=Math.min(2,retroState.canvas.zoom+0.1); render()"
+              class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors" title="Zoom in">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            </button>
+            <button onclick="fitRetroCanvas()"
+              class="text-xs font-mono text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors" title="Reset view">Fit</button>
           </div>
         </div>
-        <div class="flex items-center gap-2">
-          <!-- Timer -->
-          <div id="retro-timer" class="flex items-center gap-2">
-            <button onclick="retroState.timer.total=Math.max(60,retroState.timer.total-60); renderRetroTimerDisplay()"
-              class="w-6 h-6 flex items-center justify-center text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">-</button>
-            <span class="font-mono text-lg font-bold text-zinc-300 w-12 text-center">${Math.floor(retroState.timer.total / 60)}:00</span>
-            <button onclick="retroState.timer.total=Math.min(3600,retroState.timer.total+60); renderRetroTimerDisplay()"
-              class="w-6 h-6 flex items-center justify-center text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">+</button>
-            <button onclick="startRetroTimer(retroState.timer.total)"
-              class="flex items-center gap-1 px-2 py-1 text-xs font-mono rounded bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
-              <i data-lucide="play" class="w-3 h-3"></i> Start
-            </button>
-          </div>
-          <div class="w-px h-6 bg-zinc-700"></div>
-          <!-- Zoom -->
-          <button onclick="retroState.canvas.zoom=Math.max(0.3,retroState.canvas.zoom-0.1); render()"
-            class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors" title="Zoom out">
-            <i data-lucide="minus" class="w-4 h-4"></i>
-          </button>
-          <span class="text-xs font-mono text-zinc-400 w-10 text-center">${Math.round(zoom * 100)}%</span>
-          <button onclick="retroState.canvas.zoom=Math.min(2,retroState.canvas.zoom+0.1); render()"
-            class="text-zinc-400 hover:text-zinc-200 p-1 rounded transition-colors" title="Zoom in">
-            <i data-lucide="plus" class="w-4 h-4"></i>
-          </button>
-          <button onclick="fitRetroCanvas()"
-            class="text-xs font-mono text-zinc-400 hover:text-zinc-200 px-2 py-1 rounded bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors" title="Reset view">Fit</button>
-          <div class="w-px h-6 bg-zinc-700"></div>
-          <!-- Add note / column / GIF / WordArt -->
+        <!-- Row 2: Action buttons (scrollable on mobile) -->
+        <div class="retro-actions-scroll flex items-center gap-1.5 px-3 py-1.5 overflow-x-auto border-t border-zinc-800/30" style="-webkit-overflow-scrolling: touch;">
           <button onclick="addFreeRetroNote()"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-900 font-bold transition-colors">
-            <i data-lucide="plus" class="w-3 h-3"></i> Note
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-900 font-bold transition-colors flex-shrink-0" title="Add note">
+            <i data-lucide="plus" class="w-3 h-3"></i><span class="hidden sm:inline"> Note</span>
           </button>
           <button onclick="openGiphySearch()"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-purple-500 hover:text-purple-400 transition-colors">
-            <i data-lucide="image" class="w-3 h-3"></i> GIF
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-purple-500 hover:text-purple-400 transition-colors flex-shrink-0" title="Add GIF">
+            <i data-lucide="image" class="w-3 h-3"></i><span class="hidden sm:inline"> GIF</span>
           </button>
           <button onclick="openMemeDialog()"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors">
-            <i data-lucide="smile" class="w-3 h-3"></i> Meme
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors flex-shrink-0" title="Add meme">
+            <i data-lucide="smile" class="w-3 h-3"></i><span class="hidden sm:inline"> Meme</span>
           </button>
           <button onclick="openWordArtDialog()"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-cyan-500 hover:text-cyan-400 transition-colors"
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-cyan-500 hover:text-cyan-400 transition-colors flex-shrink-0" title="Add WordArt"
             style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: bold; letter-spacing: -0.5px;">
-            <span style="background:linear-gradient(to right,#ff0,#f0f,#0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:13px;">W</span> WordArt
+            <span style="background:linear-gradient(to right,#ff0,#f0f,#0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:13px;">W</span><span class="hidden sm:inline"> WordArt</span>
           </button>
           <button onclick="openEmojiPicker()"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-yellow-500 hover:text-yellow-400 transition-colors">
-            <span class="text-sm">😀</span> Emoji
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-yellow-500 hover:text-yellow-400 transition-colors flex-shrink-0" title="Add emoji">
+            <span class="text-sm">😀</span><span class="hidden sm:inline"> Emoji</span>
           </button>
           <button onclick="openShapeDialog()"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-sky-500 hover:text-sky-400 transition-colors">
-            <i data-lucide="shapes" class="w-3 h-3"></i> Shape
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-sky-500 hover:text-sky-400 transition-colors flex-shrink-0" title="Add shape">
+            <i data-lucide="shapes" class="w-3 h-3"></i><span class="hidden sm:inline"> Shape</span>
           </button>
           <button onclick="toggleArrowMode()"
             id="arrow-mode-btn"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-blue-500 hover:text-blue-400 transition-colors">
-            <i data-lucide="move-right" class="w-3 h-3"></i> Arrow
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-blue-500 hover:text-blue-400 transition-colors flex-shrink-0" title="Draw arrow">
+            <i data-lucide="move-right" class="w-3 h-3"></i><span class="hidden sm:inline"> Arrow</span>
           </button>
           <button onclick="addRetroColumn(getActiveRetroBoard())"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
-            <i data-lucide="columns-3" class="w-3 h-3"></i> Column
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors flex-shrink-0" title="Add column">
+            <i data-lucide="columns-3" class="w-3 h-3"></i><span class="hidden sm:inline"> Column</span>
           </button>
-          <div class="w-px h-6 bg-zinc-700"></div>
+          <div class="w-px h-5 bg-zinc-700 flex-shrink-0"></div>
           <button onclick="openSpinnerForBoard('${board.id}')"
-            class="flex items-center gap-1 px-3 py-1.5 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors">
-            <i data-lucide="disc" class="w-3 h-3"></i> Spinner
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400 transition-colors flex-shrink-0" title="Spinner game">
+            <i data-lucide="disc" class="w-3 h-3"></i><span class="hidden sm:inline"> Spinner</span>
           </button>
         </div>
       </div>
